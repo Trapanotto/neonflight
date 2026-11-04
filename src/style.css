@@ -69,6 +69,48 @@ html, body {
 .hud-topright .label { font-size: 10px; color: var(--magenta); }
 #best { font-size: 16px; color: #fff; text-shadow: 0 0 10px var(--magenta); margin-top: 2px; }
 
+.hud-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  margin-top: 12px;
+  width: 38px;
+  height: 30px;
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  border-radius: 3px;
+  background: rgba(0, 240, 255, 0.08);
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 8px var(--cyan);
+}
+.hud-btn:hover { background: rgba(0, 240, 255, 0.2); }
+
+#ring-guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 0 -42px;
+  border: 1px solid rgba(0, 240, 255, 0.38);
+  border-radius: 50%;
+  background: rgba(5, 1, 15, 0.45);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.12), inset 0 0 18px rgba(0, 240, 255, 0.08);
+  color: var(--cyan);
+  text-align: center;
+  text-shadow: 0 0 12px var(--cyan);
+}
+#ring-guide-arrow {
+  margin-top: 7px;
+  font-size: 22px;
+  line-height: 1;
+  transform-origin: 50% 30px;
+  transition: transform 0.08s linear;
+}
+#ring-guide-distance { margin-top: 7px; font-size: 9px; letter-spacing: 0.12em; }
+
 #message {
   position: absolute;
   top: 27%;
@@ -85,6 +127,7 @@ html, body {
 }
 #message.show { opacity: 1; }
 #message.warn { color: #ff4d6d; text-shadow: 0 0 20px #ff4d6d; }
+#message.miss { color: var(--amber); text-shadow: 0 0 20px var(--amber); }
 
 .boost-wrap {
   position: absolute;
@@ -186,6 +229,11 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
   margin-bottom: 24px;
 }
 .best-line span { color: #fff; text-shadow: 0 0 10px var(--cyan); }
+.medal-badge { margin-left: 8px; font-size: 9px; letter-spacing: 0.18em; }
+.medal-badge.bronze, .result-medal.bronze { color: #e59a62; text-shadow: 0 0 14px rgba(229, 154, 98, 0.8); }
+.medal-badge.silver, .result-medal.silver { color: #d8e7ff; text-shadow: 0 0 14px rgba(216, 231, 255, 0.8); }
+.medal-badge.gold, .result-medal.gold { color: #ffd15c; text-shadow: 0 0 16px rgba(255, 209, 92, 0.9); }
+.medal-badge.neon, .result-medal.neon { color: var(--cyan); text-shadow: 0 0 18px var(--cyan), 0 0 34px var(--magenta); }
 
 .neon-btn {
   pointer-events: auto;
@@ -206,6 +254,51 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
 .neon-btn:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.08); box-shadow: 0 0 26px rgba(0, 240, 255, 0.8), 0 0 66px rgba(255, 47, 208, 0.45); }
 .neon-btn:active { transform: translateY(0) scale(0.98); }
 
+.text-btn {
+  display: block;
+  margin: 12px auto 0;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: rgba(244, 234, 255, 0.55);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.text-btn:hover { color: var(--cyan); }
+
+.settings-panel { width: min(520px, 92vw); }
+.settings-list { margin: 26px 0; display: grid; gap: 16px; }
+.setting-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 12px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--cyan);
+  text-align: left;
+}
+.setting-row select {
+  grid-column: 2 / 4;
+  padding: 9px 10px;
+  border: 1px solid rgba(0, 240, 255, 0.38);
+  border-radius: 3px;
+  background: rgba(0, 240, 255, 0.06);
+  color: #f4eaff;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.setting-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+.setting-row output { font-size: 10px; color: rgba(244, 234, 255, 0.7); text-align: right; }
+
 .controls {
   list-style: none;
   margin: 28px 0 10px;
@@ -223,15 +316,32 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
 .hint { margin: 16px 0 0; font-size: 10px; letter-spacing: 0.1em; color: rgba(244, 234, 255, 0.45); line-height: 1.7; }
 .hint b { color: var(--magenta); }
 
+.result-medal {
+  margin: 18px 0 2px;
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 0.34em;
+  color: rgba(244, 234, 255, 0.65);
+}
 .result-time {
-  margin: 20px 0 6px;
+  margin: 4px 0 6px;
   font-size: 44px;
   font-weight: bold;
   color: #fff;
   text-shadow: 0 0 22px var(--cyan);
   letter-spacing: 0.06em;
 }
-.result-best { font-size: 12px; letter-spacing: 0.3em; color: var(--amber); margin-bottom: 26px; text-shadow: 0 0 14px var(--amber); }
+.result-best { font-size: 12px; letter-spacing: 0.3em; color: var(--amber); margin-bottom: 12px; text-shadow: 0 0 14px var(--amber); }
+.result-stats { font-size: 10px; letter-spacing: 0.16em; color: rgba(244, 234, 255, 0.55); margin-bottom: 26px; }
+.result-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.result-actions .neon-btn { flex: 1 1 180px; max-width: 260px; }
+.neon-btn.secondary {
+  color: var(--cyan);
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  box-shadow: inset 0 0 22px rgba(0, 240, 255, 0.08);
+}
+.neon-btn.secondary:hover { background: rgba(0, 240, 255, 0.14); }
 
 /* ---------- Effects layers ---------- */
 
@@ -248,7 +358,7 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
   inset: 0;
   z-index: 21;
   pointer-events: none;
-  opacity: 0.16;
+  opacity: 0.1;
   background: repeating-linear-gradient(
     to bottom,
     rgba(255, 255, 255, 0.06) 0px,
@@ -268,7 +378,8 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
   opacity: 0;
   transition: opacity 0.35s ease;
 }
-#flash.hit { opacity: 0.55; transition: opacity 0.03s ease; }
+#flash.hit { opacity: 0.38; transition: opacity 0.03s ease; }
+body.reduce-flash #flash.hit { opacity: 0.14; }
 
 /* ---------- Touch controls ---------- */
 
@@ -330,4 +441,18 @@ body.touch #touch-controls {
   .boost-wrap { bottom: 16px; width: 44vw; }
   body.touch .boost-wrap { bottom: 150px; }
   .touch-btn { width: 52px; height: 52px; font-size: 15px; }
+  .hud-btn { width: 32px; height: 26px; margin-top: 6px; font-size: 10px; }
+  #ring-guide { width: 68px; height: 68px; margin: -34px 0 0 -34px; }
+  #ring-guide-arrow { font-size: 18px; transform-origin: 50% 24px; }
+  .result-actions { flex-direction: column; align-items: stretch; }
+  .result-actions .neon-btn { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glitch::before,
+  .glitch::after { display: none; }
+  #message,
+  #boost-fill,
+  #ring-guide-arrow,
+  .neon-btn { transition: none; }
 }

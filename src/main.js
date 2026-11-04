@@ -4,7 +4,21 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-import { BEST_KEY, COLORS, PLANE_RADIUS, RING_COUNT, START_POSITION, START_SPEED, START_YAW } from './config.js';
+import {
+  BEST_KEY,
+  COLORS,
+  COURSE_ID,
+  COURSE_VERSION,
+  CRASH_PENALTY_SECONDS,
+  MAX_SIMULATION_STEPS,
+  MEDALS,
+  PHYSICS_VERSION,
+  RING_COUNT,
+  SIMULATION_STEP,
+  START_POSITION,
+  START_SPEED,
+  START_YAW
+} from './config.js';
 import { damp } from './utils.js';
 import { createSky } from './world/sky.js';
 import { createCity } from './world/city.js';
@@ -15,14 +29,28 @@ import { InputManager } from './input.js';
 import { AudioSystem } from './audio.js';
 import { HUD } from './hud.js';
 import { Rain, CrashEffects } from './effects.js';
+import { BuildingCollisionIndex } from './collision.js';
+import { RaceSession, getMedal, formatDelta } from './race.js';
+import {
+  getRecord,
+  getRecordKey,
+  loadProfile,
+  saveProfile,
+  setRecord
+} from './storage.js';
 
 const app = document.getElementById('app');
+const BLOOM_LEVELS = {
+  low: 0.4,
+  medium: 0.62,
+  high: 0.82
+};
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.05;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -48,6 +76,7 @@ scene.add(cyanRim);
 const sky = createSky(scene);
 const course = new Course(scene);
 const city = createCity(scene, course.path);
+const collisionIndex = new BuildingCollisionIndex(city.buildings);
 const aircraft = createAircraft();
 scene.add(aircraft.group);
 
@@ -61,9 +90,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  1.0,
-  0.72,
-  0.42
+  BLOOM_LEVELS.low,
+  0.58,
+  0.58
 );
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -71,136 +100,364 @@ composer.addPass(new OutputPass());
 const physics = new FlightModel();
 const hud = new HUD();
 const audio = new AudioSystem();
+const race = new RaceSession();
+
+const recordKey = getRecordKey(COURSE_ID, COURSE_VERSION, PHYSICS_VERSION);
+const storage = (() => {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    return null;
+  }
+})();
+
+let profile = loadProfile(storage, { recordKey, legacyKey: BEST_KEY });
+let record = getRecord(profile, recordKey);
+let bestTime = record ? record.bestTime : Number.POSITIVE_INFINITY;
+let bestSplits = record ? record.bestSplits : [];
+let bestMedal = getMedal(bestTime, MEDALS);
+
+audio.setMuted(profile.settings.muted);
+audio.setVolumes({
+  music: profile.settings.musicVolume,
+  effects: profile.settings.effectsVolume
+});
 
 const startVector = new THREE.Vector3(START_POSITION.x, START_POSITION.y, START_POSITION.z);
 physics.reset(startVector, START_YAW, START_SPEED);
 physics.applyTo(aircraft.group);
 
 let state = 'menu';
-let runTime = 0;
-
-function readBestTime() {
-  try {
-    const value = Number.parseFloat(window.localStorage.getItem(BEST_KEY));
-    return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
-  } catch (error) {
-    return Number.POSITIVE_INFINITY;
-  }
-}
-
-function writeBestTime(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch (error) {
-    // Storage may be unavailable in private mode; the run still works.
-  }
-}
-
-let bestTime = readBestTime();
-
+let accumulator = 0;
 let cameraShake = 0;
 let cameraSmoothed = false;
 let lightning = 0;
 let lightningTimer = 9 + Math.random() * 10;
 let lastFov = camera.fov;
-
 let lastFrameTime = performance.now();
 let elapsedTime = 0;
+let lastSpeedRatio = 0;
+let reduceFlashing = true;
+let settingsOpen = false;
+
+const musicVolumeInput = document.getElementById('music-volume');
+const musicVolumeValue = document.getElementById('music-volume-value');
+const effectsVolumeInput = document.getElementById('effects-volume');
+const effectsVolumeValue = document.getElementById('effects-volume-value');
+const bloomSelect = document.getElementById('bloom-select');
+const flashingSelect = document.getElementById('flashing-select');
+
 const forwardVector = new THREE.Vector3();
 const chaseTarget = new THREE.Vector3();
 const lookTarget = new THREE.Vector3();
 const menuTarget = new THREE.Vector3();
+const guideLocal = new THREE.Vector3();
+const guideProjected = new THREE.Vector3();
 
-hud.setBest(bestTime);
+hud.setBest(bestTime, bestMedal);
 hud.showHud(false);
 hud.showStart(true);
 hud.showFinish(false);
+hud.showPause(false);
+hud.showSettings(false);
+
+applyBloom(profile.settings.bloom);
+applyFlashing(profile.settings.flashing);
+syncSettingsUi();
+
+function applyBloom(level) {
+  bloom.strength = BLOOM_LEVELS[level] ?? BLOOM_LEVELS.low;
+}
+
+function applyFlashing(mode) {
+  reduceFlashing = mode === 'reduced';
+  document.body.classList.toggle('reduce-flash', reduceFlashing);
+
+  if (reduceFlashing) {
+    lightning = 0;
+    sky.flash(0);
+  } else {
+    lightningTimer = 7 + Math.random() * 8;
+  }
+}
+
+function syncSettingsUi() {
+  const music = Math.round(profile.settings.musicVolume * 100);
+  const effects = Math.round(profile.settings.effectsVolume * 100);
+  musicVolumeInput.value = String(music);
+  musicVolumeValue.textContent = `${music}%`;
+  effectsVolumeInput.value = String(effects);
+  effectsVolumeValue.textContent = `${effects}%`;
+  bloomSelect.value = profile.settings.bloom;
+  flashingSelect.value = profile.settings.flashing;
+}
+
+function openSettings() {
+  if (state === 'running') pauseRun();
+  settingsOpen = true;
+  hud.showSettings(true);
+}
+
+function closeSettings() {
+  settingsOpen = false;
+  hud.showSettings(false);
+}
 
 const input = new InputManager({
   onAction(action) {
     if (action === 'restart') {
-      startRun();
+      if (!settingsOpen) startRun();
     } else if (action === 'mute') {
       const muted = audio.toggleMute();
+      profile.settings.muted = muted;
+      saveProfile(storage, profile);
       hud.showMessage(muted ? 'AUDIO MUTED' : 'AUDIO ON', { duration: 900 });
+    } else if (action === 'pause') {
+      if (settingsOpen) {
+        closeSettings();
+      } else {
+        togglePause();
+      }
     }
   }
 });
 
 document.getElementById('start-btn').addEventListener('click', () => startRun());
 document.getElementById('restart-btn').addEventListener('click', () => startRun());
+document.getElementById('pause-restart-btn').addEventListener('click', () => startRun());
+document.getElementById('resume-btn').addEventListener('click', () => resumeRun());
+document.getElementById('pause-menu-btn').addEventListener('click', () => returnToMenu());
+document.getElementById('finish-menu-btn').addEventListener('click', () => returnToMenu());
+document.getElementById('pause-btn').addEventListener('click', () => togglePause());
+document.getElementById('settings-close').addEventListener('click', () => closeSettings());
+
+document.querySelectorAll('[data-open-settings]').forEach((button) => {
+  button.addEventListener('click', () => openSettings());
+});
+
+musicVolumeInput.addEventListener('input', () => {
+  const value = Number(musicVolumeInput.value) / 100;
+  profile.settings.musicVolume = value;
+  musicVolumeValue.textContent = `${Math.round(value * 100)}%`;
+  audio.setVolumes({ music: value });
+  saveProfile(storage, profile);
+});
+
+effectsVolumeInput.addEventListener('input', () => {
+  const value = Number(effectsVolumeInput.value) / 100;
+  profile.settings.effectsVolume = value;
+  effectsVolumeValue.textContent = `${Math.round(value * 100)}%`;
+  audio.setVolumes({ effects: value });
+  saveProfile(storage, profile);
+});
+
+bloomSelect.addEventListener('change', () => {
+  profile.settings.bloom = bloomSelect.value;
+  applyBloom(profile.settings.bloom);
+  saveProfile(storage, profile);
+});
+
+flashingSelect.addEventListener('change', () => {
+  profile.settings.flashing = flashingSelect.value;
+  applyFlashing(profile.settings.flashing);
+  saveProfile(storage, profile);
+});
 
 window.addEventListener('keydown', (event) => {
-  if (event.code === 'Enter' && state !== 'flying') {
+  if (settingsOpen) return;
+  if (event.code === 'Enter' && (state === 'menu' || state === 'finished')) {
+    event.preventDefault();
     startRun();
   }
 });
 
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseRun();
+});
+
+window.addEventListener('blur', () => pauseRun());
+
 function startRun() {
-  state = 'flying';
-  runTime = 0;
+  state = 'running';
+  race.reset();
+  accumulator = 0;
+  lastFrameTime = performance.now();
   course.reset();
   physics.reset(startVector, START_YAW, START_SPEED);
   cameraSmoothed = false;
   cameraShake = 0;
+  input.reset();
 
+  hud.clearMessage();
   hud.showStart(false);
   hud.hideResult();
+  hud.showPause(false);
+  hud.showSettings(false);
+  settingsOpen = false;
   hud.showHud(true);
-  hud.setBest(bestTime);
+  hud.setBest(bestTime, bestMedal);
 
+  audio.setPaused(false);
   audio.init().catch(() => {});
 }
 
-function finishRun() {
-  if (state !== 'flying') return;
-  state = 'finished';
+function pauseRun() {
+  if (state !== 'running') return;
+  state = 'paused';
+  accumulator = 0;
+  input.reset();
+  hud.showPause(true);
+  audio.setPaused(true);
+}
 
-  const isRecord = runTime < bestTime;
+function resumeRun() {
+  if (state !== 'paused') return;
+  state = 'running';
+  accumulator = 0;
+  lastFrameTime = performance.now();
+  input.reset();
+  hud.showPause(false);
+  audio.setPaused(false);
+}
+
+function togglePause() {
+  if (state === 'running') {
+    pauseRun();
+  } else if (state === 'paused') {
+    resumeRun();
+  }
+}
+
+function returnToMenu() {
+  state = 'menu';
+  accumulator = 0;
+  race.reset();
+  course.reset();
+  physics.reset(startVector, START_YAW, START_SPEED);
+  cameraSmoothed = false;
+  input.reset();
+
+  hud.clearMessage();
+  hud.showPause(false);
+  hud.showSettings(false);
+  settingsOpen = false;
+  hud.hideResult();
+  hud.showHud(false);
+  hud.showStart(true);
+  hud.setBest(bestTime, bestMedal);
+  audio.setPaused(true);
+}
+
+function finishRun() {
+  if (state !== 'running') return;
+  state = 'finished';
+  accumulator = 0;
+
+  const previousBest = bestTime;
+  const isRecord = race.time < bestTime;
+  const medal = getMedal(race.time, MEDALS);
+
   if (isRecord) {
-    bestTime = runTime;
-    writeBestTime(bestTime);
-    hud.setBest(bestTime);
+    bestTime = race.time;
+    bestMedal = medal;
+    record = setRecord(profile, recordKey, {
+      bestTime,
+      bestSplits: race.sectorTimes.slice(),
+      crashes: race.crashes,
+      misses: race.misses,
+      medal: medal ? medal.id : null,
+      updatedAt: Date.now()
+    });
+    bestSplits = record ? record.bestSplits : [];
+    saveProfile(storage, profile);
+    hud.setBest(bestTime, bestMedal);
   }
 
-  hud.showResult({ time: runTime, best: bestTime, isRecord });
+  hud.showResult({
+    time: race.time,
+    best: bestTime,
+    isRecord,
+    previousBest,
+    medal,
+    crashes: race.crashes,
+    misses: race.misses
+  });
   hud.showMessage('COURSE CLEAR', { duration: 1800 });
   audio.finish();
+  audio.setPaused(false);
 }
 
 function crash() {
-  if (state !== 'flying') return;
+  if (state !== 'running') return;
 
   audio.crash();
   crashEffects.trigger(physics.position);
   hud.flash();
-  hud.showMessage('CONNECTION LOST', { warn: true, duration: 1300 });
-  cameraShake = 1.1;
+  hud.showMessage(`CONNECTION LOST // +${CRASH_PENALTY_SECONDS.toFixed(1)}S`, {
+    warn: true,
+    duration: 1300
+  });
+  cameraShake = reduceFlashing ? 0.35 : 1.1;
+  race.addCrash();
 
   const checkpoint = course.getCheckpoint();
-  const respawn = checkpoint.position.clone();
-  physics.reset(respawn, checkpoint.yaw, 52);
-  physics.throttle = 0.7;
+  physics.respawn(checkpoint.position, checkpoint.yaw, 52);
   course.previousPosition = null;
 }
 
-function checkBuildingCollision() {
-  if (physics.grace > 0) return false;
+function handleRingEvent(event) {
+  if (!event.passed && !event.missed) return;
 
-  const { x, y, z } = physics.position;
-
-  for (let i = 0; i < city.buildings.length; i++) {
-    const building = city.buildings[i];
-    if (
-      Math.abs(x - building.x) < building.width * 0.5 + PLANE_RADIUS &&
-      Math.abs(z - building.z) < building.depth * 0.5 + PLANE_RADIUS &&
-      y < building.height + PLANE_RADIUS
-    ) {
-      return true;
-    }
+  if (event.missed) {
+    race.addMiss();
   }
 
-  return false;
+  if (event.refill) {
+    physics.boost = 1;
+
+    const split = race.recordSector();
+    const sectorIndex = race.sectorTimes.length - 1;
+    const bestSplit = bestSplits[sectorIndex];
+    const delta = Number.isFinite(bestSplit) ? split - bestSplit : null;
+
+    if (event.missed) {
+      audio.checkpoint();
+      hud.showMessage('CHECKPOINT // RING MISSED', { miss: true, duration: 1300 });
+    } else {
+      audio.checkpoint();
+      hud.showMessage(
+        delta === null ? 'CHECKPOINT // BOOST FULL' : `CHECKPOINT // ${formatDelta(delta)}`,
+        { duration: 1300 }
+      );
+    }
+  } else if (event.missed) {
+    audio.miss();
+    hud.showMessage('RING MISSED', { miss: true, duration: 700 });
+  } else {
+    audio.chime(event.index);
+  }
+
+  if (event.finished) finishRun();
+}
+
+function simulateStep(dt, time) {
+  race.tick(dt);
+
+  const info = physics.update(dt, input.state);
+  lastSpeedRatio = info.speedRatio ?? 0;
+
+  const hitBuilding = physics.grace <= 0
+    && collisionIndex.intersectsSegment(physics.previousPosition, physics.position);
+
+  if (info.crashed || hitBuilding) {
+    crash();
+    return;
+  }
+
+  const event = course.update(dt, time, physics.position);
+  handleRingEvent(event);
+
+  if (info.boostStarted) audio.boostWhoosh();
 }
 
 function updateCamera(dt, speedRatio) {
@@ -238,6 +495,58 @@ function updateCamera(dt, speedRatio) {
     camera.updateProjectionMatrix();
     lastFov = camera.fov;
   }
+
+  camera.updateMatrixWorld();
+}
+
+function getRingGuidance(ring) {
+  if (!ring) return null;
+
+  guideLocal.copy(ring.position).applyMatrix4(camera.matrixWorldInverse);
+  guideProjected.copy(ring.position).project(camera);
+
+  const inFront = guideLocal.z < 0;
+  const onScreen = inFront
+    && Math.abs(guideProjected.x) < 0.86
+    && Math.abs(guideProjected.y) < 0.82;
+
+  const angle = inFront
+    ? Math.atan2(guideLocal.x, guideLocal.y)
+    : Math.atan2(guideLocal.x, -guideLocal.z);
+
+  return {
+    visible: !onScreen,
+    angle
+  };
+}
+
+function updateFlightPresentation(dt, time) {
+  physics.applyTo(aircraft.group);
+  aircraft.update({
+    throttle: physics.throttle,
+    boost: physics.boosting ? 1 : 0,
+    speed: physics.speed,
+    time
+  });
+
+  audio.updateEngine(physics.throttle, lastSpeedRatio, physics.boosting ? 1 : 0);
+  updateCamera(dt, lastSpeedRatio);
+
+  const ring = course.rings[course.currentIndex] || null;
+  const distance = ring ? physics.position.distanceTo(ring.position) : 0;
+  const guide = getRingGuidance(ring);
+
+  hud.update({
+    speed: physics.speed,
+    altitude: physics.position.y,
+    time: race.time,
+    ring: course.currentIndex,
+    total: RING_COUNT,
+    best: bestTime,
+    boost: physics.boost,
+    distance,
+    guide
+  });
 }
 
 function updateMenu(dt, time) {
@@ -262,67 +571,33 @@ function updateMenu(dt, time) {
   course.update(dt, time, physics.position);
 }
 
-function updateFlight(dt, time) {
-  const info = physics.update(dt, input.state);
-  runTime += dt;
-
-  if (info.crashed || checkBuildingCollision()) {
-    crash();
-  } else {
-    const event = course.update(dt, time, physics.position);
-
-    if (event.passed) {
-      if (event.refill) {
-        physics.boost = 1;
-        audio.checkpoint();
-        hud.showMessage('CHECKPOINT // BOOST FULL', { duration: 1200 });
-      } else {
-        audio.chime(event.index);
-      }
-
-      if (event.finished) {
-        finishRun();
-      }
-    }
-
-    if (info.boostStarted) audio.boostWhoosh();
-  }
-
-  physics.applyTo(aircraft.group);
-  aircraft.update({
-    throttle: physics.throttle,
-    boost: physics.boosting ? 1 : 0,
-    speed: physics.speed,
-    time
-  });
-
-  audio.updateEngine(physics.throttle, info.speedRatio ?? 0, physics.boosting ? 1 : 0);
-  updateCamera(dt, info.speedRatio ?? 0);
-
-  hud.update({
-    speed: physics.speed,
-    altitude: physics.position.y,
-    time: runTime,
-    ring: course.currentIndex,
-    total: RING_COUNT,
-    best: bestTime,
-    boost: physics.boost
-  });
-}
-
 function animate() {
   requestAnimationFrame(animate);
 
   const now = performance.now();
-  const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+  const frameDt = Math.min((now - lastFrameTime) / 1000, 0.25);
   lastFrameTime = now;
-  elapsedTime += dt;
+  elapsedTime += frameDt;
   const time = elapsedTime;
 
-  if (state === 'flying') {
-    updateFlight(dt, time);
+  if (state === 'running') {
+    accumulator += frameDt;
+    let steps = 0;
+
+    while (accumulator >= SIMULATION_STEP && steps < MAX_SIMULATION_STEPS && state === 'running') {
+      simulateStep(SIMULATION_STEP, time);
+      accumulator -= SIMULATION_STEP;
+      steps++;
+    }
+
+    // Do not let a long frame build an endless simulation backlog.
+    if (steps >= MAX_SIMULATION_STEPS) accumulator = 0;
+
+    if (state === 'running' || state === 'finished') {
+      updateFlightPresentation(frameDt, time);
+    }
   } else if (state === 'menu') {
-    updateMenu(dt, time);
+    updateMenu(frameDt, time);
   } else {
     aircraft.update({
       throttle: 0,
@@ -332,22 +607,24 @@ function animate() {
     });
   }
 
-  city.update(dt);
+  city.update(frameDt);
 
-  lightningTimer -= dt;
-  if (lightningTimer <= 0) {
-    lightningTimer = 11 + Math.random() * 16;
-    lightning = 1;
-    sky.flash(0.75 + Math.random() * 0.25);
-    audio.playNoiseBurst({ duration: 1.4, from: 320, to: 50, gain: 0.16 });
+  if (!reduceFlashing) {
+    lightningTimer -= frameDt;
+    if (lightningTimer <= 0) {
+      lightningTimer = 14 + Math.random() * 18;
+      lightning = 0.65;
+      sky.flash(0.35 + Math.random() * 0.15);
+      audio.playNoiseBurst({ duration: 1.2, from: 260, to: 50, gain: 0.1 });
+    }
   }
-  lightning = damp(lightning, 0, 3, dt);
+  lightning = damp(lightning, 0, 3, frameDt);
   ambient.intensity = 0.9 + lightning * 0.9;
   hemisphere.intensity = 0.8 + lightning * 0.7;
 
-  rain.update(dt, camera.position);
-  crashEffects.update(dt, camera);
-  sky.update(dt, time, camera.position);
+  rain.update(frameDt, camera.position);
+  crashEffects.update(frameDt, camera);
+  sky.update(frameDt, time, camera.position);
 
   composer.render();
 }

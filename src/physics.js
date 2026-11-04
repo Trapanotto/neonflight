@@ -5,6 +5,7 @@ import { clamp, damp } from './utils.js';
 export class FlightModel {
   constructor() {
     this.position = new THREE.Vector3();
+    this.previousPosition = new THREE.Vector3();
     this.yaw = 0;
     this.pitch = 0;
     this.roll = 0;
@@ -17,12 +18,25 @@ export class FlightModel {
 
   reset(position, yaw, speed = 46) {
     this.position.copy(position);
+    this.previousPosition.copy(position);
     this.yaw = yaw;
     this.pitch = 0;
     this.roll = 0;
     this.speed = speed;
     this.throttle = 0.62;
     this.boost = 1;
+    this.boosting = false;
+    this.grace = 1.2;
+  }
+
+  respawn(position, yaw, speed = 52) {
+    this.position.copy(position);
+    this.previousPosition.copy(position);
+    this.yaw = yaw;
+    this.pitch = 0;
+    this.roll = 0;
+    this.speed = speed;
+    this.throttle = 0.7;
     this.boosting = false;
     this.grace = 1.2;
   }
@@ -38,6 +52,7 @@ export class FlightModel {
 
   update(dt, input) {
     const wasBoosting = this.boosting;
+    this.previousPosition.copy(this.position);
 
     this.throttle = clamp(
       this.throttle + ((input.throttleUp ? 1 : 0) - (input.throttleDown ? 1 : 0)) * 0.8 * dt,

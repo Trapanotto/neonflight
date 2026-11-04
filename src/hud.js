@@ -1,4 +1,6 @@
+import { CRASH_PENALTY_SECONDS } from './config.js';
 import { formatTime } from './utils.js';
+import { formatDelta } from './race.js';
 
 export class HUD {
   constructor() {
@@ -9,13 +11,21 @@ export class HUD {
     this.progress = document.getElementById('progress');
     this.best = document.getElementById('best');
     this.menuBest = document.getElementById('menu-best');
+    this.menuMedal = document.getElementById('menu-medal');
     this.boostFill = document.getElementById('boost-fill');
     this.message = document.getElementById('message');
     this.startScreen = document.getElementById('start-screen');
     this.finishScreen = document.getElementById('finish-screen');
+    this.pauseScreen = document.getElementById('pause-screen');
+    this.settingsScreen = document.getElementById('settings-screen');
     this.finishTime = document.getElementById('finish-time');
     this.finishBest = document.getElementById('finish-best');
+    this.finishMedal = document.getElementById('finish-medal');
+    this.finishStats = document.getElementById('finish-stats');
     this.flashLayer = document.getElementById('flash');
+    this.ringGuide = document.getElementById('ring-guide');
+    this.ringGuideArrow = document.getElementById('ring-guide-arrow');
+    this.ringGuideDistance = document.getElementById('ring-guide-distance');
     this.messageTimer = null;
     this.flashTimer = null;
   }
@@ -32,30 +42,62 @@ export class HUD {
     this.finishScreen.classList.toggle('hidden', !visible);
   }
 
-  update({ speed, altitude, time, ring, total, best, boost }) {
+  showPause(visible) {
+    this.pauseScreen.classList.toggle('hidden', !visible);
+  }
+
+  showSettings(visible) {
+    this.settingsScreen.classList.toggle('hidden', !visible);
+  }
+
+  update({ speed, altitude, time, ring, total, best, boost, distance, guide }) {
     this.speed.textContent = Math.round(speed * 3.6);
     this.altitude.textContent = Math.round(altitude);
     this.timer.textContent = formatTime(Math.max(0, time));
-    this.progress.textContent = `RING ${String(Math.min(ring + 1, total)).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+    this.progress.textContent = `RING ${String(Math.min(ring + 1, total)).padStart(2, '0')} / ${String(total).padStart(2, '0')} · ${Math.round(distance)} M`;
     this.best.textContent = formatTime(best);
     if (this.menuBest) this.menuBest.textContent = formatTime(best);
     this.boostFill.style.width = `${Math.round(boost * 100)}%`;
+    this.updateGuide(guide, distance);
   }
 
-  setBest(best) {
+  updateGuide(guide, distance) {
+    if (!guide || !guide.visible) {
+      this.ringGuide.classList.add('hidden');
+      return;
+    }
+
+    this.ringGuide.classList.remove('hidden');
+    this.ringGuideArrow.style.transform = `rotate(${guide.angle}rad)`;
+    this.ringGuideDistance.textContent = `${Math.round(distance)} M`;
+  }
+
+  setBest(best, medal = null) {
     this.best.textContent = formatTime(best);
     if (this.menuBest) this.menuBest.textContent = formatTime(best);
+
+    if (this.menuMedal) {
+      this.menuMedal.textContent = medal ? medal.label : '';
+      this.menuMedal.className = `medal-badge${medal ? ` ${medal.id}` : ''}`;
+    }
   }
 
-  showMessage(text, { duration = 1400, warn = false } = {}) {
+  showMessage(text, { duration = 1400, warn = false, miss = false } = {}) {
     this.message.textContent = text;
     this.message.classList.toggle('warn', warn);
+    this.message.classList.toggle('miss', miss);
     this.message.classList.add('show');
 
     if (this.messageTimer) window.clearTimeout(this.messageTimer);
     this.messageTimer = window.setTimeout(() => {
       this.message.classList.remove('show');
     }, duration);
+  }
+
+  clearMessage() {
+    if (this.messageTimer) window.clearTimeout(this.messageTimer);
+    this.message.classList.remove('show', 'warn', 'miss');
+    this.message.textContent = '';
   }
 
   flash() {
@@ -66,9 +108,36 @@ export class HUD {
     }, 90);
   }
 
-  showResult({ time, best, isRecord }) {
+  showResult({ time, best, isRecord, previousBest, medal, crashes, misses = 0 }) {
+    const delta = Number.isFinite(previousBest) ? time - previousBest : null;
+    const stats = [];
+
+    if (crashes > 0) {
+      stats.push(`${crashes} ${crashes === 1 ? 'CRASH' : 'CRASHES'}`);
+    }
+    if (misses > 0) {
+      stats.push(`${misses} MISSED`);
+    }
+    if (crashes > 0) {
+      stats.push(`${(crashes * CRASH_PENALTY_SECONDS).toFixed(0)}s PENALTY`);
+    }
+    if (stats.length === 0) {
+      stats.push('CLEAN RUN');
+    }
+
     this.finishTime.textContent = formatTime(time);
-    this.finishBest.textContent = isRecord ? 'NEW RECORD' : `BEST ${formatTime(best)}`;
+    this.finishMedal.textContent = medal ? medal.label : 'FINISHED';
+    this.finishMedal.className = `result-medal${medal ? ` ${medal.id}` : ''}`;
+    this.finishStats.textContent = stats.join(' · ');
+
+    if (isRecord) {
+      this.finishBest.textContent = delta === null
+        ? 'NEW RECORD'
+        : `NEW RECORD · ${formatDelta(delta)}`;
+    } else {
+      this.finishBest.textContent = `BEST ${formatTime(best)} · ${formatDelta(delta)}`;
+    }
+
     this.showFinish(true);
   }
 

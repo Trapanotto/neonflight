@@ -3,6 +3,8 @@ import {
   COLORS,
   RING_COUNT,
   RING_RADIUS,
+  RING_RADIUS_MAX,
+  RING_RADIUS_MIN,
   RING_TUBE,
   CHECKPOINT_EVERY,
   COURSE_SEED,
@@ -68,17 +70,51 @@ export class Course {
 
     let heading = 0;
     let altitude = START_POSITION.y;
+    let curveDirection = random() < 0.5 ? 1 : -1;
+    let curveRun = 2 + Math.floor(random() * 3);
+    let verticalDirection = random() < 0.5 ? 1 : -1;
+    let verticalRun = 2 + Math.floor(random() * 3);
 
     for (let i = 0; i < RING_COUNT; i++) {
       const previous = path[path.length - 1];
-      const step = 165 + random() * 60;
+      const straightSection = i > 0 && i % 7 === 0;
+      const step = straightSection
+        ? 200 + random() * 35
+        : 150 + random() * 65;
 
-      heading += (random() - 0.5) * 0.42;
-      heading += previous.x * 0.00025;
-      heading = clamp(heading, -1.0, 1.0);
+      if (curveRun <= 0) {
+        curveDirection *= -1;
+        curveRun = 2 + Math.floor(random() * 4);
+      }
+      if (verticalRun <= 0) {
+        verticalDirection *= -1;
+        verticalRun = 2 + Math.floor(random() * 3);
+      }
+      curveRun--;
+      verticalRun--;
 
-      altitude += (random() - 0.5) * 52;
-      altitude = clamp(altitude, 48, 235);
+      const turn = straightSection
+        ? (random() - 0.5) * 0.06
+        : curveDirection * (0.16 + random() * 0.28) + (random() - 0.5) * 0.1;
+
+      heading += turn;
+      heading += previous.x * 0.00035;
+      if (Math.abs(heading) > 1.2) {
+        curveDirection = -Math.sign(heading);
+      }
+      heading = clamp(heading, -1.25, 1.25);
+
+      altitude += verticalDirection * (20 + random() * 38) + (random() - 0.5) * 14;
+      if (altitude > 225) {
+        altitude = 225;
+        verticalDirection = -1;
+        verticalRun = 2 + Math.floor(random() * 3);
+      } else if (altitude < 48) {
+        altitude = 48;
+        verticalDirection = 1;
+        verticalRun = 2 + Math.floor(random() * 3);
+      }
+      altitude = clamp(altitude, 48, 225);
 
       path.push(new THREE.Vector3(
         previous.x - Math.sin(heading) * step,
@@ -97,8 +133,13 @@ export class Course {
       const position = this.path[i];
       const previous = this.path[i - 1];
       const direction = new THREE.Vector3().subVectors(position, previous).normalize();
+      const isCheckpoint = i % CHECKPOINT_EVERY === 0;
+      const radius = isCheckpoint
+        ? RING_RADIUS
+        : RING_RADIUS_MIN + this.random() * (RING_RADIUS_MAX - RING_RADIUS_MIN);
 
-      const ring = createRing(RING_RADIUS);
+      const ring = createRing(radius);
+      ring.radius = radius;
       ring.group.position.copy(position);
 
       dummy.position.set(0, 0, 0);
@@ -119,6 +160,7 @@ export class Course {
 
   refreshColors() {
     const nextColor = new THREE.Color(COLORS.cyan);
+    const followColor = new THREE.Color(COLORS.amber).multiplyScalar(0.9);
     const upcomingColor = new THREE.Color(COLORS.magenta).multiplyScalar(0.5);
     const passedColor = new THREE.Color(COLORS.purple).multiplyScalar(0.16);
 
@@ -132,9 +174,12 @@ export class Course {
       } else if (index === this.currentIndex) {
         tint = nextColor;
         opacity = 1;
+      } else if (index === this.currentIndex + 1) {
+        tint = followColor;
+        opacity = 0.7;
       } else {
         tint = upcomingColor;
-        opacity = 0.75;
+        opacity = 0.48;
       }
 
       ring.mainMaterial.color.copy(tint);
@@ -152,6 +197,9 @@ export class Course {
       position: new THREE.Vector3(START_POSITION.x, START_POSITION.y, START_POSITION.z),
       yaw: START_YAW
     };
+    this.rings.forEach((ring) => {
+      ring.passed = false;
+    });
     this.refreshColors();
   }
 
@@ -162,6 +210,7 @@ export class Course {
   update(dt, time, planePosition) {
     const result = {
       passed: false,
+      missed: false,
       index: -1,
       checkpoint: false,
       refill: false,
@@ -183,18 +232,23 @@ export class Course {
       const currentAlong = currentLocal.dot(ring.direction);
       const previousAlong = previousLocal.dot(ring.direction);
 
-      const currentRadial = Math.sqrt(Math.max(0, currentLocal.lengthSq() - currentAlong * currentAlong));
+      // A forward crossing always completes the current ring slot. Crossing
+      // outside the aperture is a miss, but the run continues with the next
+      // ring instead of forcing the player to turn back.
+      const crossedForward = previousAlong < 0 && currentAlong >= 0;
 
-      const crossedPlane = previousAlong * currentAlong <= 0;
-      const insideRing = currentRadial < RING_RADIUS * 1.18;
-      const veryClose = currentLocal.length() < RING_RADIUS * 0.8;
-
-      if ((crossedPlane && insideRing) || veryClose) {
+      if (crossedForward) {
+        const t = previousAlong / (previousAlong - currentAlong);
+        const intersection = new THREE.Vector3()
+          .lerpVectors(this.previousPosition, planePosition, t);
+        const insideRing = intersection.distanceTo(ring.position) < ring.radius * 1.05;
         const completedIndex = this.currentIndex;
-        ring.passed = true;
+
+        ring.passed = insideRing;
         this.currentIndex++;
 
-        result.passed = true;
+        result.passed = insideRing;
+        result.missed = !insideRing;
         result.index = completedIndex;
         result.refill = (completedIndex + 1) % CHECKPOINT_EVERY === 0;
 
@@ -214,7 +268,11 @@ export class Course {
       }
     }
 
-    this.previousPosition = planePosition.clone();
+    if (this.previousPosition) {
+      this.previousPosition.copy(planePosition);
+    } else {
+      this.previousPosition = planePosition.clone();
+    }
     return result;
   }
 }

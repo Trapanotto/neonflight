@@ -25,6 +25,12 @@
     <div class="hud-block hud-topright">
       <div class="label">BEST</div>
       <div id="best">--:--.---</div>
+      <button id="pause-btn" class="hud-btn" type="button" aria-label="Pause">II</button>
+    </div>
+
+    <div id="ring-guide" class="hidden" aria-hidden="true">
+      <div id="ring-guide-arrow">&#9650;</div>
+      <div id="ring-guide-distance">0 M</div>
     </div>
 
     <div id="message"></div>
@@ -40,16 +46,17 @@
       <div class="eyebrow">A SYNTHWAVE FLIGHT TRIAL</div>
       <h1 class="glitch" data-text="NEON SKYWAYS">NEON SKYWAYS</h1>
       <p class="tagline">Thread the city. Chase the sun. Beat the clock.</p>
-      <div class="best-line">BEST <span id="menu-best">--:--.---</span></div>
+      <div class="best-line">BEST <span id="menu-best">--:--.---</span> <span id="menu-medal" class="medal-badge"></span></div>
       <button id="start-btn" class="neon-btn">START RUN</button>
+      <button class="text-btn" type="button" data-open-settings>SETTINGS</button>
       <ul class="controls">
         <li><b>W / S</b> throttle</li>
         <li><b>&uarr; / &darr;</b> pitch</li>
         <li><b>&larr; / &rarr;</b> roll &amp; turn</li>
         <li><b>SHIFT</b> boost</li>
-        <li><b>R</b> restart &nbsp; <b>M</b> mute</li>
+        <li><b>ESC</b> pause &nbsp; <b>R</b> restart &nbsp; <b>M</b> mute</li>
       </ul>
-      <p class="hint">Fly through the neon rings in order. Passing every 6th ring refills your boost.</p>
+      <p class="hint">Fly through the neon rings. Missed rings won't stop your run, but every miss costs time. Passing each checkpoint refills your boost.</p>
     </div>
   </div>
 
@@ -57,10 +64,66 @@
     <div class="panel">
       <div class="eyebrow">RUN COMPLETE</div>
       <h2>COURSE CLEARED</h2>
+      <div class="result-medal" id="finish-medal">FINISHED</div>
       <div class="result-time" id="finish-time">00:00.000</div>
       <div class="result-best" id="finish-best">NEW RECORD</div>
-      <button id="restart-btn" class="neon-btn">FLY AGAIN</button>
-      <p class="hint">Press <b>R</b> to restart instantly.</p>
+      <div class="result-stats" id="finish-stats">0 CRASHES &nbsp;·&nbsp; CLEAN RUN</div>
+      <div class="result-actions">
+        <button id="restart-btn" class="neon-btn">RETRY</button>
+        <button id="finish-menu-btn" class="neon-btn secondary">MAIN MENU</button>
+      </div>
+      <p class="hint">Press <b>R</b> to retry instantly.</p>
+    </div>
+  </div>
+
+  <div id="pause-screen" class="overlay hidden">
+    <div class="panel">
+      <div class="eyebrow">FLIGHT SUSPENDED</div>
+      <h2>PAUSED</h2>
+      <p class="tagline">Take a breath. The clock is stopped.</p>
+      <div class="result-actions">
+        <button id="resume-btn" class="neon-btn">RESUME</button>
+        <button class="neon-btn secondary" type="button" data-open-settings>SETTINGS</button>
+        <button id="pause-restart-btn" class="neon-btn secondary">RESTART RUN</button>
+        <button id="pause-menu-btn" class="neon-btn secondary">MAIN MENU</button>
+      </div>
+      <p class="hint">Press <b>ESC</b> to resume.</p>
+    </div>
+  </div>
+
+  <div id="settings-screen" class="overlay hidden">
+    <div class="panel settings-panel">
+      <div class="eyebrow">SYSTEM CONFIG</div>
+      <h2>SETTINGS</h2>
+      <div class="settings-list">
+        <label class="setting-row" for="music-volume">
+          <span>MUSIC</span>
+          <input id="music-volume" type="range" min="0" max="100" step="1" />
+          <output id="music-volume-value">75%</output>
+        </label>
+        <label class="setting-row" for="effects-volume">
+          <span>EFFECTS</span>
+          <input id="effects-volume" type="range" min="0" max="100" step="1" />
+          <output id="effects-volume-value">85%</output>
+        </label>
+        <label class="setting-row" for="bloom-select">
+          <span>BLOOM</span>
+          <select id="bloom-select">
+            <option value="low">LOW</option>
+            <option value="medium">MEDIUM</option>
+            <option value="high">HIGH</option>
+          </select>
+        </label>
+        <label class="setting-row" for="flashing-select">
+          <span>FLASHING</span>
+          <select id="flashing-select">
+            <option value="reduced">REDUCED</option>
+            <option value="normal">NORMAL</option>
+          </select>
+        </label>
+      </div>
+      <button id="settings-close" class="neon-btn" type="button">BACK</button>
+      <p class="hint">Reduced flashing disables lightning and dims crash flashes. Settings are saved locally.</p>
     </div>
   </div>
 

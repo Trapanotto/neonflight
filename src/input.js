@@ -11,7 +11,9 @@ const CONTROL_KEYS = {
 
 const ACTION_KEYS = {
   KeyR: 'restart',
-  KeyM: 'mute'
+  KeyM: 'mute',
+  KeyP: 'pause',
+  Escape: 'pause'
 };
 
 export class InputManager {

@@ -12,6 +12,7 @@ export class AudioSystem {
     this.ctx = null;
     this.master = null;
     this.musicGain = null;
+    this.effectsGain = null;
     this.engine = null;
     this.wind = null;
     this.noiseBuffer = null;
@@ -20,6 +21,39 @@ export class AudioSystem {
     this.musicNextTime = 0;
     this.musicTimer = null;
     this.volume = 0.62;
+    this.musicVolume = 0.75;
+    this.effectsVolume = 0.85;
+    this.paused = false;
+  }
+
+  updateMasterGain() {
+    if (!this.master || !this.ctx) return;
+    const target = this.muted || this.paused ? 0 : this.volume;
+    this.master.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
+  }
+
+  setPaused(paused) {
+    this.paused = Boolean(paused);
+    this.updateMasterGain();
+  }
+
+  setMuted(muted) {
+    this.muted = Boolean(muted);
+    this.updateMasterGain();
+    return this.muted;
+  }
+
+  setVolumes({ music, effects }) {
+    if (Number.isFinite(music)) this.musicVolume = Math.min(1, Math.max(0, music));
+    if (Number.isFinite(effects)) this.effectsVolume = Math.min(1, Math.max(0, effects));
+
+    if (!this.ctx) return;
+    if (this.musicGain) {
+      this.musicGain.gain.setTargetAtTime(0.42 * this.musicVolume, this.ctx.currentTime, 0.05);
+    }
+    if (this.effectsGain) {
+      this.effectsGain.gain.setTargetAtTime(this.effectsVolume, this.ctx.currentTime, 0.05);
+    }
   }
 
   async init() {
@@ -28,14 +62,18 @@ export class AudioSystem {
       if (!Context) return;
       this.ctx = new Context();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : this.volume;
+      this.master.gain.value = this.muted || this.paused ? 0 : this.volume;
       this.master.connect(this.ctx.destination);
+
+      this.effectsGain = this.ctx.createGain();
+      this.effectsGain.gain.value = this.effectsVolume;
+      this.effectsGain.connect(this.master);
 
       this.noiseBuffer = this.createNoiseBuffer();
       this.engine = this.createEngine();
       this.wind = this.createWind();
       this.musicGain = this.ctx.createGain();
-      this.musicGain.gain.value = 0.42;
+      this.musicGain.gain.value = 0.42 * this.musicVolume;
       this.musicGain.connect(this.master);
 
       this.musicNextTime = this.ctx.currentTime + 0.2;
@@ -60,7 +98,7 @@ export class AudioSystem {
   createEngine() {
     const output = this.ctx.createGain();
     output.gain.value = 0;
-    output.connect(this.master);
+    output.connect(this.effectsGain);
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -101,7 +139,7 @@ export class AudioSystem {
 
     source.connect(filter);
     filter.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.effectsGain);
     source.start();
 
     return { source, filter, gain };
@@ -140,7 +178,7 @@ export class AudioSystem {
 
     source.connect(filter);
     filter.connect(gainNode);
-    gainNode.connect(this.master);
+    gainNode.connect(this.effectsGain);
     source.start(now);
     source.stop(now + duration + 0.02);
   }
@@ -158,10 +196,26 @@ export class AudioSystem {
       gain.gain.linearRampToValueAtTime(0.09 / (i + 1), now + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
       osc.connect(gain);
-      gain.connect(this.master);
+      gain.connect(this.effectsGain);
       osc.start(now);
       osc.stop(now + 0.44);
     });
+  }
+
+  miss() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(95, now + 0.18);
+    gain.gain.setValueAtTime(0.07, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(this.effectsGain);
+    osc.start(now);
+    osc.stop(now + 0.22);
   }
 
   checkpoint() {
@@ -177,7 +231,7 @@ export class AudioSystem {
       gain.gain.linearRampToValueAtTime(0.1, start + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, start + 0.5);
       osc.connect(gain);
-      gain.connect(this.master);
+      gain.connect(this.effectsGain);
       osc.start(start);
       osc.stop(start + 0.55);
     });
@@ -199,7 +253,7 @@ export class AudioSystem {
     gain.gain.setValueAtTime(0.18, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
     osc.connect(gain);
-    gain.connect(this.master);
+    gain.connect(this.effectsGain);
     osc.start(now);
     osc.stop(now + 0.55);
   }
@@ -217,7 +271,7 @@ export class AudioSystem {
       gain.gain.linearRampToValueAtTime(0.12, start + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.001, start + 0.7);
       osc.connect(gain);
-      gain.connect(this.master);
+      gain.connect(this.effectsGain);
       osc.start(start);
       osc.stop(start + 0.75);
     });
@@ -332,10 +386,6 @@ export class AudioSystem {
   }
 
   toggleMute() {
-    this.muted = !this.muted;
-    if (this.master) {
-      this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.05);
-    }
-    return this.muted;
+    return this.setMuted(!this.muted);
   }
 }
