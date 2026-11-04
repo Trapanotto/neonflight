@@ -22,6 +22,8 @@ export class HUD {
     this.finishBest = document.getElementById('finish-best');
     this.finishMedal = document.getElementById('finish-medal');
     this.finishStats = document.getElementById('finish-stats');
+    this.finishChallenge = document.getElementById('finish-challenge');
+    this.shareStatus = document.getElementById('share-status');
     this.flashLayer = document.getElementById('flash');
     this.ringGuide = document.getElementById('ring-guide');
     this.ringGuideArrow = document.getElementById('ring-guide-arrow');
@@ -108,7 +110,7 @@ export class HUD {
     }, 90);
   }
 
-  showResult({ time, best, isRecord, previousBest, medal, crashes, misses = 0 }) {
+  showResult({ time, best, isRecord, previousBest, medal, crashes, misses = 0, challenge = null }) {
     const delta = Number.isFinite(previousBest) ? time - previousBest : null;
     const stats = [];
 
@@ -138,7 +140,22 @@ export class HUD {
       this.finishBest.textContent = `BEST ${formatTime(best)} · ${formatDelta(delta)}`;
     }
 
+    if (challenge) {
+      this.finishChallenge.textContent = challenge.beaten
+        ? `CHALLENGE BEATEN // TARGET ${formatTime(challenge.target)}`
+        : `CHALLENGE MISSED // TARGET ${formatTime(challenge.target)}`;
+      this.finishChallenge.className = `result-challenge${challenge.beaten ? ' beaten' : ''}`;
+    } else {
+      this.finishChallenge.textContent = '';
+      this.finishChallenge.className = 'result-challenge hidden';
+    }
+
+    this.shareStatus.textContent = '';
     this.showFinish(true);
+  }
+
+  setShareStatus(text) {
+    this.shareStatus.textContent = text;
   }
 
   hideResult() {

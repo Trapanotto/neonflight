@@ -69,6 +69,18 @@ npm test
 - Gamepad support for flight, boost, throttle and pause.
 - Settings cover music/effects volume, bloom intensity, flashing and ghosts.
   Reduced flashing is the default and disables lightning.
+- Shareable challenge links select a course and show a target time to beat.
+- The result screen supports native sharing with clipboard fallback.
+
+## Challenge links
+
+`SHARE RUN` creates a link such as:
+
+```text
+https://trapanotto.github.io/neonflight/?course=storm-circuit&target=62.500
+```
+
+Opening it selects the course and displays the target in the main menu.
 
 See [KONZEPT.md](KONZEPT.md) for the longer-term product and technical roadmap.
 

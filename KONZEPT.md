@@ -505,8 +505,11 @@ Damit wird die vorhandene Stärke – ein attraktiver, sofort spielbarer Run –
 - Versionierte Bestzeiten und Ghostdaten pro Kurs.
 - Lokaler Personal-Best-Ghost mit Interpolation und Abschaltoption.
 - Gamepad-Unterstützung für Steuerung, Boost, Schub und Pause.
-- 31 automatisierte Tests für Kurs, Kollision, Rennzeit, Ghost und Speicher.
+- Teilbare Challenge-Links mit Kurs- und Zielzeit.
+- Ergebnis-Sharing über Web Share API mit Clipboard-Fallback.
+- Challenge-Status im Ergebnisbildschirm.
+- 35 automatisierte Tests für Kurs, Kollision, Rennzeit, Ghost, Sharing und Speicher.
 - CI-Workflow für Tests und Produktionsbuild.
 
 **Noch offen:** dokumentierte Fremd-Playtests, Mobile-Polish, Daily Seed,
-Freundes-Challenges und optionale Online-Ranglisten.
+Online-Ranglisten und serverseitig validierte Replays.

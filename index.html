@@ -46,6 +46,10 @@
       <div class="eyebrow">A SYNTHWAVE FLIGHT TRIAL</div>
       <h1 class="glitch" data-text="NEON SKYWAYS">NEON SKYWAYS</h1>
       <p class="tagline">Thread the city. Chase the sun. Beat the clock.</p>
+      <div id="challenge-banner" class="challenge-banner hidden">
+        <span class="challenge-label">FRIEND CHALLENGE</span>
+        <span id="challenge-text">BEAT --:--.---</span>
+      </div>
       <div id="course-list" class="course-list" aria-label="Course selection"></div>
       <div class="best-line">BEST <span id="menu-best">--:--.---</span> <span id="menu-medal" class="medal-badge"></span></div>
       <button id="start-btn" class="neon-btn">START RUN</button>
@@ -70,11 +74,14 @@
       <div class="result-time" id="finish-time">00:00.000</div>
       <div class="result-best" id="finish-best">NEW RECORD</div>
       <div class="result-stats" id="finish-stats">0 CRASHES &nbsp;·&nbsp; CLEAN RUN</div>
+      <div id="finish-challenge" class="result-challenge hidden"></div>
       <div class="result-actions">
         <button id="restart-btn" class="neon-btn">RETRY</button>
+        <button id="share-run-btn" class="neon-btn secondary">SHARE RUN</button>
         <button id="next-course-btn" class="neon-btn secondary">NEXT COURSE</button>
         <button id="finish-menu-btn" class="neon-btn secondary">MAIN MENU</button>
       </div>
+      <p id="share-status" class="share-status" aria-live="polite"></p>
       <p class="hint">Press <b>R</b> to retry instantly.</p>
     </div>
   </div>

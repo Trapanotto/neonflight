@@ -23,6 +23,11 @@ import { Course } from './course.js';
 import { createAircraft, createGhostAircraft } from './aircraft.js';
 import { COURSES, getCourseById } from './content/courses.js';
 import { GhostPlayer, GhostRecorder } from './ghost.js';
+import {
+  buildChallengeUrl,
+  buildShareText,
+  parseChallengeUrl
+} from './share.js';
 import { FlightModel } from './physics.js';
 import { InputManager } from './input.js';
 import { AudioSystem } from './audio.js';
@@ -122,7 +127,14 @@ const storage = (() => {
 
 let recordKey = getRecordKey(COURSES[0].id, COURSES[0].version, PHYSICS_VERSION);
 let profile = loadProfile(storage, { recordKey, legacyKey: BEST_KEY });
-selectedCourse = getCourseById(profile.settings.lastCourse);
+const challenge = parseChallengeUrl(
+  window.location.href,
+  COURSES.map((item) => item.id)
+);
+const activeChallenge = challenge.courseId && challenge.target
+  ? { courseId: challenge.courseId, target: challenge.target }
+  : null;
+selectedCourse = getCourseById(challenge.courseId || profile.settings.lastCourse);
 course = courses.find((item) => item.config.id === selectedCourse.id) || courses[0];
 recordKey = getRecordKey(selectedCourse.id, selectedCourse.version, PHYSICS_VERSION);
 let record = getRecord(profile, recordKey);
@@ -153,6 +165,7 @@ let elapsedTime = 0;
 let lastSpeedRatio = 0;
 let reduceFlashing = true;
 let settingsOpen = false;
+let lastResult = null;
 
 const musicVolumeInput = document.getElementById('music-volume');
 const musicVolumeValue = document.getElementById('music-volume-value');
@@ -162,6 +175,8 @@ const bloomSelect = document.getElementById('bloom-select');
 const flashingSelect = document.getElementById('flashing-select');
 const ghostSelect = document.getElementById('ghost-select');
 const courseList = document.getElementById('course-list');
+const challengeBanner = document.getElementById('challenge-banner');
+const challengeText = document.getElementById('challenge-text');
 
 const forwardVector = new THREE.Vector3();
 const chaseTarget = new THREE.Vector3();
@@ -256,6 +271,18 @@ function renderCourseList() {
   });
 }
 
+function renderChallengeBanner() {
+  const isActive = activeChallenge && activeChallenge.courseId === selectedCourse.id;
+
+  if (!isActive) {
+    challengeBanner.classList.add('hidden');
+    return;
+  }
+
+  challengeText.textContent = `BEAT ${formatTime(activeChallenge.target)} ON ${selectedCourse.name}`;
+  challengeBanner.classList.remove('hidden');
+}
+
 function selectCourse(id, { persist = true } = {}) {
   selectedCourse = getCourseById(id);
   course = courses.find((item) => item.config.id === selectedCourse.id) || courses[0];
@@ -284,6 +311,7 @@ function selectCourse(id, { persist = true } = {}) {
 
   hud.setBest(bestTime, bestMedal);
   renderCourseList();
+  renderChallengeBanner();
 }
 
 function nextCourse() {
@@ -291,6 +319,31 @@ function nextCourse() {
   const next = COURSES[(index + 1) % COURSES.length];
   selectCourse(next.id);
   startRun();
+}
+
+async function shareCurrentRun() {
+  if (!lastResult) return;
+
+  const url = buildChallengeUrl(window.location.href, lastResult.courseId, lastResult.time);
+  const text = buildShareText(lastResult.courseName, lastResult.time);
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'NEON SKYWAYS', text, url });
+      hud.setShareStatus('SHARED');
+      return;
+    } catch (error) {
+      if (error && error.name === 'AbortError') return;
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    hud.setShareStatus('CHALLENGE LINK COPIED');
+  } catch (error) {
+    window.prompt('Copy challenge link:', url);
+    hud.setShareStatus('COPY LINK');
+  }
 }
 
 function openSettings() {
@@ -330,6 +383,7 @@ document.getElementById('resume-btn').addEventListener('click', () => resumeRun(
 document.getElementById('pause-menu-btn').addEventListener('click', () => returnToMenu());
 document.getElementById('finish-menu-btn').addEventListener('click', () => returnToMenu());
 document.getElementById('next-course-btn').addEventListener('click', () => nextCourse());
+document.getElementById('share-run-btn').addEventListener('click', () => shareCurrentRun());
 document.getElementById('pause-btn').addEventListener('click', () => togglePause());
 document.getElementById('settings-close').addEventListener('click', () => closeSettings());
 
@@ -392,6 +446,7 @@ window.addEventListener('blur', () => pauseRun());
 
 function startRun() {
   state = 'running';
+  lastResult = null;
   race.reset();
   accumulator = 0;
   lastFrameTime = performance.now();
@@ -499,6 +554,19 @@ function finishRun() {
     hud.setBest(bestTime, bestMedal);
   }
 
+  const challengeResult = activeChallenge && activeChallenge.courseId === selectedCourse.id
+    ? {
+      target: activeChallenge.target,
+      beaten: race.time <= activeChallenge.target
+    }
+    : null;
+
+  lastResult = {
+    courseId: selectedCourse.id,
+    courseName: selectedCourse.name,
+    time: race.time
+  };
+
   hud.showResult({
     time: race.time,
     best: bestTime,
@@ -506,7 +574,8 @@ function finishRun() {
     previousBest,
     medal,
     crashes: race.crashes,
-    misses: race.misses
+    misses: race.misses,
+    challenge: challengeResult
   });
   hud.showMessage('COURSE CLEAR', { duration: 1800 });
   audio.finish();

@@ -224,6 +224,24 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
   text-transform: uppercase;
 }
 
+.challenge-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: center;
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 190, 61, 0.55);
+  border-radius: 3px;
+  background: rgba(255, 190, 61, 0.08);
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 12px rgba(255, 190, 61, 0.5);
+}
+.challenge-label { color: rgba(255, 190, 61, 0.7); }
+#challenge-text { color: #fff; }
+
 .course-list {
   display: grid;
   gap: 7px;
@@ -365,7 +383,17 @@ h2 { font-size: clamp(26px, 5vw, 42px); }
   letter-spacing: 0.06em;
 }
 .result-best { font-size: 12px; letter-spacing: 0.3em; color: var(--amber); margin-bottom: 12px; text-shadow: 0 0 14px var(--amber); }
-.result-stats { font-size: 10px; letter-spacing: 0.16em; color: rgba(244, 234, 255, 0.55); margin-bottom: 26px; }
+.result-stats { font-size: 10px; letter-spacing: 0.16em; color: rgba(244, 234, 255, 0.55); margin-bottom: 10px; }
+.result-challenge {
+  margin: 0 0 18px;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.18em;
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(255, 190, 61, 0.5);
+}
+.result-challenge.beaten { color: var(--cyan); text-shadow: 0 0 14px var(--cyan); }
+.share-status { min-height: 14px; margin: 10px 0 0; font-size: 9px; letter-spacing: 0.16em; color: var(--cyan); }
 .result-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
 .result-actions .neon-btn { flex: 1 1 180px; max-width: 260px; }
 .neon-btn.secondary {
