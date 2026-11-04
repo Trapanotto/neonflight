@@ -44,9 +44,16 @@ function createRing(radius) {
 }
 
 export class Course {
-  constructor(scene, seed = COURSE_SEED) {
+  constructor(scene, seed = COURSE_SEED, options = {}) {
     this.scene = scene;
     this.random = mulberry32(seed);
+    this.tuning = {
+      curveScale: 1,
+      elevationScale: 1,
+      stepScale: 1,
+      radiusScale: 1,
+      ...options
+    };
     this.group = new THREE.Group();
     scene.add(this.group);
 
@@ -78,9 +85,10 @@ export class Course {
     for (let i = 0; i < RING_COUNT; i++) {
       const previous = path[path.length - 1];
       const straightSection = i > 0 && i % 7 === 0;
-      const step = straightSection
+      const baseStep = straightSection
         ? 200 + random() * 35
         : 150 + random() * 65;
+      const step = baseStep * this.tuning.stepScale;
 
       if (curveRun <= 0) {
         curveDirection *= -1;
@@ -93,18 +101,20 @@ export class Course {
       curveRun--;
       verticalRun--;
 
-      const turn = straightSection
+      const baseTurn = straightSection
         ? (random() - 0.5) * 0.06
         : curveDirection * (0.16 + random() * 0.28) + (random() - 0.5) * 0.1;
 
-      heading += turn;
+      heading += baseTurn * this.tuning.curveScale;
       heading += previous.x * 0.00035;
       if (Math.abs(heading) > 1.2) {
         curveDirection = -Math.sign(heading);
       }
       heading = clamp(heading, -1.25, 1.25);
 
-      altitude += verticalDirection * (20 + random() * 38) + (random() - 0.5) * 14;
+      altitude += (
+        verticalDirection * (20 + random() * 38) + (random() - 0.5) * 14
+      ) * this.tuning.elevationScale;
       if (altitude > 225) {
         altitude = 225;
         verticalDirection = -1;
@@ -134,9 +144,10 @@ export class Course {
       const previous = this.path[i - 1];
       const direction = new THREE.Vector3().subVectors(position, previous).normalize();
       const isCheckpoint = i % CHECKPOINT_EVERY === 0;
-      const radius = isCheckpoint
+      const baseRadius = isCheckpoint
         ? RING_RADIUS
         : RING_RADIUS_MIN + this.random() * (RING_RADIUS_MAX - RING_RADIUS_MIN);
+      const radius = baseRadius * this.tuning.radiusScale;
 
       const ring = createRing(radius);
       ring.radius = radius;

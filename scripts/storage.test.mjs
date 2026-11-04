@@ -41,6 +41,9 @@ test('round-trips a versioned record and settings', () => {
     bestSplits: [12.1, 24.4],
     crashes: 1,
     misses: 2,
+    ghost: [
+      { t: 0, x: 1, y: 50, z: 2, pitch: 0, yaw: 0, roll: 0 }
+    ],
     medal: 'gold'
   });
 
@@ -50,6 +53,8 @@ test('round-trips a versioned record and settings', () => {
   assert.equal(loaded.settings.muted, true);
   assert.deepEqual(loaded.records[key].bestSplits, [12.1, 24.4]);
   assert.equal(loaded.records[key].misses, 2);
+  assert.equal(loaded.records[key].ghost.length, 1);
+  assert.equal(loaded.records[key].ghost[0].y, 50);
   assert.equal(loaded.records[key].medal, 'gold');
 });
 
@@ -70,7 +75,9 @@ test('normalizes comfort and audio settings', () => {
         musicVolume: 2,
         effectsVolume: -1,
         bloom: 'high',
-        flashing: 'normal'
+        flashing: 'normal',
+        ghost: false,
+        lastCourse: 'storm-circuit'
       },
       records: {}
     })
@@ -81,6 +88,8 @@ test('normalizes comfort and audio settings', () => {
   assert.equal(profile.settings.effectsVolume, 0);
   assert.equal(profile.settings.bloom, 'high');
   assert.equal(profile.settings.flashing, 'normal');
+  assert.equal(profile.settings.ghost, false);
+  assert.equal(profile.settings.lastCourse, 'storm-circuit');
 });
 
 test('does not load invalid record times', () => {

@@ -1,6 +1,51 @@
 import * as THREE from 'three';
 import { COLORS } from './config.js';
 
+export function createGhostAircraft() {
+  const group = new THREE.Group();
+  group.rotation.order = 'YXZ';
+
+  const material = new THREE.MeshBasicMaterial({
+    color: COLORS.cyan,
+    transparent: true,
+    opacity: 0.28,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false
+  });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.45, 5.2), material);
+  body.position.z = 0.2;
+  group.add(body);
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.8, 8), material);
+  nose.rotation.x = -Math.PI / 2;
+  nose.position.z = -3.2;
+  group.add(nose);
+
+  const wings = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.16, 1.9), material);
+  wings.position.z = 0.2;
+  group.add(wings);
+
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.14, 0.8), material);
+  tail.position.z = 2.7;
+  group.add(tail);
+
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.2, 0.9), material);
+  fin.position.set(0, 0.55, 2.8);
+  group.add(fin);
+
+  group.visible = false;
+
+  return {
+    group,
+    applyTo(transform) {
+      group.position.set(transform.x, transform.y, transform.z);
+      group.rotation.set(transform.pitch, transform.yaw, transform.roll);
+    }
+  };
+}
+
 export function createAircraft() {
   const group = new THREE.Group();
   group.rotation.order = 'YXZ';

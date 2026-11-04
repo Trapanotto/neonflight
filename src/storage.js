@@ -1,4 +1,5 @@
 import { BEST_KEY, PROFILE_KEY } from './config.js';
+import { sanitizeGhostSamples } from './ghost.js';
 
 const PROFILE_VERSION = 1;
 
@@ -20,7 +21,9 @@ export function createEmptyProfile() {
       musicVolume: 0.75,
       effectsVolume: 0.85,
       bloom: 'low',
-      flashing: 'reduced'
+      flashing: 'reduced',
+      ghost: true,
+      lastCourse: ''
     },
     records: {}
   };
@@ -41,6 +44,7 @@ function normalizeRecord(record) {
     bestSplits: normalizeSplits(record.bestSplits),
     crashes: Number.isInteger(record.crashes) ? Math.max(0, record.crashes) : 0,
     misses: Number.isInteger(record.misses) ? Math.max(0, record.misses) : 0,
+    ghost: sanitizeGhostSamples(record.ghost),
     medal: typeof record.medal === 'string' ? record.medal : null,
     migrated: record.migrated === true,
     updatedAt: Number.isFinite(record.updatedAt) ? record.updatedAt : 0
@@ -66,6 +70,10 @@ function normalizeProfile(value) {
     }
     if (['reduced', 'normal'].includes(value.settings.flashing)) {
       profile.settings.flashing = value.settings.flashing;
+    }
+    profile.settings.ghost = value.settings.ghost !== false;
+    if (typeof value.settings.lastCourse === 'string') {
+      profile.settings.lastCourse = value.settings.lastCourse;
     }
   }
 
@@ -110,6 +118,7 @@ export function loadProfile(storage, { recordKey, legacyKey = BEST_KEY } = {}) {
         bestSplits: [],
         crashes: 0,
         misses: 0,
+        ghost: [],
         medal: null,
         migrated: true,
         updatedAt: 0

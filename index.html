@@ -46,6 +46,7 @@
       <div class="eyebrow">A SYNTHWAVE FLIGHT TRIAL</div>
       <h1 class="glitch" data-text="NEON SKYWAYS">NEON SKYWAYS</h1>
       <p class="tagline">Thread the city. Chase the sun. Beat the clock.</p>
+      <div id="course-list" class="course-list" aria-label="Course selection"></div>
       <div class="best-line">BEST <span id="menu-best">--:--.---</span> <span id="menu-medal" class="medal-badge"></span></div>
       <button id="start-btn" class="neon-btn">START RUN</button>
       <button class="text-btn" type="button" data-open-settings>SETTINGS</button>
@@ -55,6 +56,7 @@
         <li><b>&larr; / &rarr;</b> roll &amp; turn</li>
         <li><b>SHIFT</b> boost</li>
         <li><b>ESC</b> pause &nbsp; <b>R</b> restart &nbsp; <b>M</b> mute</li>
+        <li><b>GAMEPAD</b> stick &nbsp; <b>RT / LT</b> throttle &nbsp; <b>A</b> boost</li>
       </ul>
       <p class="hint">Fly through the neon rings. Missed rings won't stop your run, but every miss costs time. Passing each checkpoint refills your boost.</p>
     </div>
@@ -70,6 +72,7 @@
       <div class="result-stats" id="finish-stats">0 CRASHES &nbsp;·&nbsp; CLEAN RUN</div>
       <div class="result-actions">
         <button id="restart-btn" class="neon-btn">RETRY</button>
+        <button id="next-course-btn" class="neon-btn secondary">NEXT COURSE</button>
         <button id="finish-menu-btn" class="neon-btn secondary">MAIN MENU</button>
       </div>
       <p class="hint">Press <b>R</b> to retry instantly.</p>
@@ -119,6 +122,13 @@
           <select id="flashing-select">
             <option value="reduced">REDUCED</option>
             <option value="normal">NORMAL</option>
+          </select>
+        </label>
+        <label class="setting-row" for="ghost-select">
+          <span>PB GHOST</span>
+          <select id="ghost-select">
+            <option value="on">ON</option>
+            <option value="off">OFF</option>
           </select>
         </label>
       </div>

@@ -500,8 +500,13 @@ Damit wird die vorhandene Stärke – ein attraktiver, sofort spielbarer Run –
 - Einstellungen für Musik, Effekte, Bloom und Blitzintensität.
 - Standardmäßig reduziertes Blitzen: kein Stroboskop, weniger Bloom und ein
   gedimmter Crash-Flash.
-- 25 automatisierte Tests für Kurs, Kollision, Rennzeit und Speicher.
+- Drei auswählbare Kurse mit eigener Streckencharakteristik, Tuning und
+  Medaillenzielen.
+- Versionierte Bestzeiten und Ghostdaten pro Kurs.
+- Lokaler Personal-Best-Ghost mit Interpolation und Abschaltoption.
+- Gamepad-Unterstützung für Steuerung, Boost, Schub und Pause.
+- 31 automatisierte Tests für Kurs, Kollision, Rennzeit, Ghost und Speicher.
 - CI-Workflow für Tests und Produktionsbuild.
 
-**Noch offen:** dokumentierte Fremd-Playtests, Gamepad, weitere Kurse, Ghost,
-Mobile-Polish und optionale Online-Funktionen.
+**Noch offen:** dokumentierte Fremd-Playtests, Mobile-Polish, Daily Seed,
+Freundes-Challenges und optionale Online-Ranglisten.

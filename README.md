@@ -18,7 +18,9 @@ ring becomes active, and every 6th checkpoint still refills your boost.
 | Restart | `R` |
 | Mute | `M` |
 
-Touch controls appear automatically on coarse-pointer devices.
+Gamepad: left stick for pitch/roll, `RT`/`LT` for throttle, `A` or right
+shoulder for boost, and `Start` to pause. Touch controls appear automatically
+on coarse-pointer devices.
 
 ## Development
 
@@ -48,7 +50,8 @@ npm test
 - Seeded procedural course, so best times are comparable between runs
 - Fixed 120 Hz simulation with frame-rate-independent race timing
 - Spatial building collision index and swept collision checks
-- Versioned local profile for settings, records and sector splits
+- Versioned local profile for settings, records, sector splits and PB ghosts
+- Three course definitions with per-course tuning and medal targets
 
 ## Gameplay updates
 
@@ -58,10 +61,13 @@ npm test
 - Checkpoints report the delta to the best sector split.
 - Runs are graded with Bronze, Silver, Gold and Neon medal targets.
 - The next ring is highlighted; an off-screen guide points back to it.
-- The course now has stronger S-curves, climbs, dives and varied ring sizes.
+- Three selectable courses with distinct routing, pacing and medal targets.
+- The course generator uses stronger S-curves, climbs, dives and varied ring sizes.
 - Records are versioned by course and physics version. The previous local best
   is migrated automatically.
-- Settings cover music/effects volume, bloom intensity and reduced flashing.
+- A local personal-best ghost can be replayed and switched off in the settings.
+- Gamepad support for flight, boost, throttle and pause.
+- Settings cover music/effects volume, bloom intensity, flashing and ghosts.
   Reduced flashing is the default and disables lightning.
 
 See [KONZEPT.md](KONZEPT.md) for the longer-term product and technical roadmap.

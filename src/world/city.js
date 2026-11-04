@@ -102,17 +102,20 @@ export function createCity(scene, coursePath, seed = 4242) {
   const random = mulberry32(seed);
   const group = new THREE.Group();
   scene.add(group);
+  const coursePaths = Array.isArray(coursePath[0]) ? coursePath : [coursePath];
 
   let minX = Infinity;
   let maxX = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
 
-  for (const point of coursePath) {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minZ = Math.min(minZ, point.z);
-    maxZ = Math.max(maxZ, point.z);
+  for (const path of coursePaths) {
+    for (const point of path) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minZ = Math.min(minZ, point.z);
+      maxZ = Math.max(maxZ, point.z);
+    }
   }
 
   const margin = 520;
@@ -130,10 +133,12 @@ export function createCity(scene, coursePath, seed = 4242) {
   const CLEARANCE = 70;
 
   const nearCourse = (x, z) => {
-    for (let i = 0; i < coursePath.length - 1; i++) {
-      const a = coursePath[i];
-      const b = coursePath[i + 1];
-      if (distanceToSegment2D(x, z, a.x, a.z, b.x, b.z) < CLEARANCE) return true;
+    for (const path of coursePaths) {
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i];
+        const b = path[i + 1];
+        if (distanceToSegment2D(x, z, a.x, a.z, b.x, b.z) < CLEARANCE) return true;
+      }
     }
     return false;
   };

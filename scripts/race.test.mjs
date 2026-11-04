@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { RaceSession, formatDelta, getMedal } from '../src/race.js';
-import { MEDALS } from '../src/config.js';
+import { COURSES } from '../src/content/courses.js';
 
 test('advances race time only by simulation ticks', () => {
   const race = new RaceSession();
@@ -45,11 +45,12 @@ test('records sector splits including penalties', () => {
 });
 
 test('selects the fastest reached medal', () => {
-  assert.equal(getMedal(47, MEDALS).id, 'neon');
-  assert.equal(getMedal(52, MEDALS).id, 'gold');
-  assert.equal(getMedal(65, MEDALS).id, 'silver');
-  assert.equal(getMedal(82, MEDALS).id, 'bronze');
-  assert.equal(getMedal(100, MEDALS), null);
+  const medals = COURSES[0].medals;
+  assert.equal(getMedal(47, medals).id, 'neon');
+  assert.equal(getMedal(52, medals).id, 'gold');
+  assert.equal(getMedal(65, medals).id, 'silver');
+  assert.equal(getMedal(82, medals).id, 'bronze');
+  assert.equal(getMedal(100, medals), null);
 });
 
 test('formats signed race deltas', () => {

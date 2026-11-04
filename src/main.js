@@ -7,11 +7,8 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
   BEST_KEY,
   COLORS,
-  COURSE_ID,
-  COURSE_VERSION,
   CRASH_PENALTY_SECONDS,
   MAX_SIMULATION_STEPS,
-  MEDALS,
   PHYSICS_VERSION,
   RING_COUNT,
   SIMULATION_STEP,
@@ -19,11 +16,13 @@ import {
   START_SPEED,
   START_YAW
 } from './config.js';
-import { damp } from './utils.js';
+import { damp, formatTime } from './utils.js';
 import { createSky } from './world/sky.js';
 import { createCity } from './world/city.js';
 import { Course } from './course.js';
-import { createAircraft } from './aircraft.js';
+import { createAircraft, createGhostAircraft } from './aircraft.js';
+import { COURSES, getCourseById } from './content/courses.js';
+import { GhostPlayer, GhostRecorder } from './ghost.js';
 import { FlightModel } from './physics.js';
 import { InputManager } from './input.js';
 import { AudioSystem } from './audio.js';
@@ -74,11 +73,20 @@ cyanRim.position.set(320, 240, 220);
 scene.add(cyanRim);
 
 const sky = createSky(scene);
-const course = new Course(scene);
-const city = createCity(scene, course.path);
+const courses = COURSES.map((config) => {
+  const item = new Course(scene, config.seed, config.tuning);
+  item.config = config;
+  return item;
+});
+const coursePaths = courses.map((item) => item.path);
+let course = courses[0];
+let selectedCourse = COURSES[0];
+const city = createCity(scene, coursePaths);
 const collisionIndex = new BuildingCollisionIndex(city.buildings);
 const aircraft = createAircraft();
 scene.add(aircraft.group);
+const ghostAircraft = createGhostAircraft();
+scene.add(ghostAircraft.group);
 
 const rain = new Rain(scene);
 const crashEffects = new CrashEffects(scene);
@@ -101,8 +109,9 @@ const physics = new FlightModel();
 const hud = new HUD();
 const audio = new AudioSystem();
 const race = new RaceSession();
+const ghostRecorder = new GhostRecorder();
+const ghostPlayer = new GhostPlayer();
 
-const recordKey = getRecordKey(COURSE_ID, COURSE_VERSION, PHYSICS_VERSION);
 const storage = (() => {
   try {
     return window.localStorage;
@@ -111,11 +120,16 @@ const storage = (() => {
   }
 })();
 
+let recordKey = getRecordKey(COURSES[0].id, COURSES[0].version, PHYSICS_VERSION);
 let profile = loadProfile(storage, { recordKey, legacyKey: BEST_KEY });
+selectedCourse = getCourseById(profile.settings.lastCourse);
+course = courses.find((item) => item.config.id === selectedCourse.id) || courses[0];
+recordKey = getRecordKey(selectedCourse.id, selectedCourse.version, PHYSICS_VERSION);
 let record = getRecord(profile, recordKey);
 let bestTime = record ? record.bestTime : Number.POSITIVE_INFINITY;
 let bestSplits = record ? record.bestSplits : [];
-let bestMedal = getMedal(bestTime, MEDALS);
+let bestGhost = record ? record.ghost : [];
+let bestMedal = getMedal(bestTime, selectedCourse.medals);
 
 audio.setMuted(profile.settings.muted);
 audio.setVolumes({
@@ -146,6 +160,8 @@ const effectsVolumeInput = document.getElementById('effects-volume');
 const effectsVolumeValue = document.getElementById('effects-volume-value');
 const bloomSelect = document.getElementById('bloom-select');
 const flashingSelect = document.getElementById('flashing-select');
+const ghostSelect = document.getElementById('ghost-select');
+const courseList = document.getElementById('course-list');
 
 const forwardVector = new THREE.Vector3();
 const chaseTarget = new THREE.Vector3();
@@ -153,6 +169,14 @@ const lookTarget = new THREE.Vector3();
 const menuTarget = new THREE.Vector3();
 const guideLocal = new THREE.Vector3();
 const guideProjected = new THREE.Vector3();
+const ghostTransform = {
+  x: 0,
+  y: 0,
+  z: 0,
+  pitch: 0,
+  yaw: 0,
+  roll: 0
+};
 
 hud.setBest(bestTime, bestMedal);
 hud.showHud(false);
@@ -164,6 +188,7 @@ hud.showSettings(false);
 applyBloom(profile.settings.bloom);
 applyFlashing(profile.settings.flashing);
 syncSettingsUi();
+selectCourse(selectedCourse.id, { persist: false });
 
 function applyBloom(level) {
   bloom.strength = BLOOM_LEVELS[level] ?? BLOOM_LEVELS.low;
@@ -190,6 +215,82 @@ function syncSettingsUi() {
   effectsVolumeValue.textContent = `${effects}%`;
   bloomSelect.value = profile.settings.bloom;
   flashingSelect.value = profile.settings.flashing;
+  ghostSelect.value = profile.settings.ghost ? 'on' : 'off';
+}
+
+function renderCourseList() {
+  courseList.replaceChildren();
+
+  COURSES.forEach((config) => {
+    const key = getRecordKey(config.id, config.version, PHYSICS_VERSION);
+    const courseRecord = getRecord(profile, key);
+    const courseBest = courseRecord ? courseRecord.bestTime : Number.POSITIVE_INFINITY;
+    const courseMedal = getMedal(courseBest, config.medals);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `course-card${config.id === selectedCourse.id ? ' selected' : ''}`;
+    button.dataset.course = config.id;
+
+    const name = document.createElement('span');
+    name.className = 'course-name';
+    name.textContent = config.name;
+
+    const difficulty = document.createElement('span');
+    difficulty.className = 'course-difficulty';
+    difficulty.textContent = config.difficulty;
+
+    const tagline = document.createElement('span');
+    tagline.className = 'course-tagline';
+    tagline.textContent = config.tagline;
+
+    const recordLine = document.createElement('span');
+    recordLine.className = 'course-record';
+    recordLine.textContent = courseRecord
+      ? `${formatTime(courseBest)}${courseMedal ? ` · ${courseMedal.label}` : ''}`
+      : 'NO RECORD';
+
+    name.append(' · ', difficulty);
+    button.append(name, tagline, recordLine);
+    button.addEventListener('click', () => selectCourse(config.id));
+    courseList.append(button);
+  });
+}
+
+function selectCourse(id, { persist = true } = {}) {
+  selectedCourse = getCourseById(id);
+  course = courses.find((item) => item.config.id === selectedCourse.id) || courses[0];
+
+  courses.forEach((item) => {
+    item.group.visible = item === course;
+    item.reset();
+  });
+
+  recordKey = getRecordKey(selectedCourse.id, selectedCourse.version, PHYSICS_VERSION);
+  record = getRecord(profile, recordKey);
+  bestTime = record ? record.bestTime : Number.POSITIVE_INFINITY;
+  bestSplits = record ? record.bestSplits : [];
+  bestGhost = record ? record.ghost : [];
+  bestMedal = getMedal(bestTime, selectedCourse.medals);
+
+  physics.reset(startVector, START_YAW, START_SPEED);
+  physics.applyTo(aircraft.group);
+  ghostAircraft.group.visible = false;
+  cameraSmoothed = false;
+
+  if (persist) {
+    profile.settings.lastCourse = selectedCourse.id;
+    saveProfile(storage, profile);
+  }
+
+  hud.setBest(bestTime, bestMedal);
+  renderCourseList();
+}
+
+function nextCourse() {
+  const index = COURSES.findIndex((item) => item.id === selectedCourse.id);
+  const next = COURSES[(index + 1) % COURSES.length];
+  selectCourse(next.id);
+  startRun();
 }
 
 function openSettings() {
@@ -228,6 +329,7 @@ document.getElementById('pause-restart-btn').addEventListener('click', () => sta
 document.getElementById('resume-btn').addEventListener('click', () => resumeRun());
 document.getElementById('pause-menu-btn').addEventListener('click', () => returnToMenu());
 document.getElementById('finish-menu-btn').addEventListener('click', () => returnToMenu());
+document.getElementById('next-course-btn').addEventListener('click', () => nextCourse());
 document.getElementById('pause-btn').addEventListener('click', () => togglePause());
 document.getElementById('settings-close').addEventListener('click', () => closeSettings());
 
@@ -263,6 +365,17 @@ flashingSelect.addEventListener('change', () => {
   saveProfile(storage, profile);
 });
 
+ghostSelect.addEventListener('change', () => {
+  profile.settings.ghost = ghostSelect.value === 'on';
+  saveProfile(storage, profile);
+
+  if (!profile.settings.ghost) {
+    ghostAircraft.group.visible = false;
+  } else if (state === 'running' && bestGhost.length > 1) {
+    ghostAircraft.group.visible = true;
+  }
+});
+
 window.addEventListener('keydown', (event) => {
   if (settingsOpen) return;
   if (event.code === 'Enter' && (state === 'menu' || state === 'finished')) {
@@ -288,6 +401,11 @@ function startRun() {
   cameraShake = 0;
   input.reset();
 
+  ghostRecorder.reset();
+  captureGhost(0, true);
+  ghostPlayer.setSamples(bestGhost);
+  ghostAircraft.group.visible = profile.settings.ghost && bestGhost.length > 1;
+
   hud.clearMessage();
   hud.showStart(false);
   hud.hideResult();
@@ -296,6 +414,10 @@ function startRun() {
   settingsOpen = false;
   hud.showHud(true);
   hud.setBest(bestTime, bestMedal);
+
+  if (ghostAircraft.group.visible) {
+    hud.showMessage('PB GHOST ACTIVE', { duration: 1100 });
+  }
 
   audio.setPaused(false);
   audio.init().catch(() => {});
@@ -336,6 +458,7 @@ function returnToMenu() {
   physics.reset(startVector, START_YAW, START_SPEED);
   cameraSmoothed = false;
   input.reset();
+  ghostAircraft.group.visible = false;
 
   hud.clearMessage();
   hud.showPause(false);
@@ -355,7 +478,8 @@ function finishRun() {
 
   const previousBest = bestTime;
   const isRecord = race.time < bestTime;
-  const medal = getMedal(race.time, MEDALS);
+  const medal = getMedal(race.time, selectedCourse.medals);
+  captureGhost(race.elapsed, true);
 
   if (isRecord) {
     bestTime = race.time;
@@ -365,10 +489,12 @@ function finishRun() {
       bestSplits: race.sectorTimes.slice(),
       crashes: race.crashes,
       misses: race.misses,
+      ghost: ghostRecorder.samples.slice(),
       medal: medal ? medal.id : null,
       updatedAt: Date.now()
     });
     bestSplits = record ? record.bestSplits : [];
+    bestGhost = record ? record.ghost : [];
     saveProfile(storage, profile);
     hud.setBest(bestTime, bestMedal);
   }
@@ -440,11 +566,22 @@ function handleRingEvent(event) {
   if (event.finished) finishRun();
 }
 
+function captureGhost(time, force = false) {
+  ghostTransform.x = physics.position.x;
+  ghostTransform.y = physics.position.y;
+  ghostTransform.z = physics.position.z;
+  ghostTransform.pitch = physics.pitch;
+  ghostTransform.yaw = physics.yaw;
+  ghostTransform.roll = physics.roll;
+  return ghostRecorder.capture(time, ghostTransform, force);
+}
+
 function simulateStep(dt, time) {
   race.tick(dt);
 
   const info = physics.update(dt, input.state);
   lastSpeedRatio = info.speedRatio ?? 0;
+  captureGhost(race.elapsed);
 
   const hitBuilding = physics.grace <= 0
     && collisionIndex.intersectsSegment(physics.previousPosition, physics.position);
@@ -532,6 +669,15 @@ function updateFlightPresentation(dt, time) {
   audio.updateEngine(physics.throttle, lastSpeedRatio, physics.boosting ? 1 : 0);
   updateCamera(dt, lastSpeedRatio);
 
+  if (ghostAircraft.group.visible) {
+    const ghostTransform = ghostPlayer.update(race.elapsed);
+    if (ghostTransform) {
+      ghostAircraft.applyTo(ghostTransform);
+    } else {
+      ghostAircraft.group.visible = false;
+    }
+  }
+
   const ring = course.rings[course.currentIndex] || null;
   const distance = ring ? physics.position.distanceTo(ring.position) : 0;
   const guide = getRingGuidance(ring);
@@ -579,6 +725,7 @@ function animate() {
   lastFrameTime = now;
   elapsedTime += frameDt;
   const time = elapsedTime;
+  input.update();
 
   if (state === 'running') {
     accumulator += frameDt;
