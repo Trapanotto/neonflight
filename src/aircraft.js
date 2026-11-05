@@ -201,8 +201,8 @@ export function createAircraft() {
     flames.push(flame);
   });
 
-  const engineLight = new THREE.PointLight(0xff9a4d, 1.2, 26, 2);
-  engineLight.position.set(0, 2.4, 2.6);
+  const engineLight = new THREE.PointLight(0xff9a4d, 0.8, 12, 2);
+  engineLight.position.set(0, 1.8, 2.4);
   group.add(engineLight);
 
   const spineNeon = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 3.6), neonCyan);
@@ -256,7 +256,7 @@ export function createAircraft() {
       const glowScale = 0.6 + throttle * 0.4 + boost * 0.6;
       engineGlows.forEach((glow) => glow.scale.setScalar(glowScale));
 
-      engineLight.intensity = 0.5 + throttle * 1.1 + boost * 1.4;
+      engineLight.intensity = 0.3 + throttle * 0.5 + boost * 0.6;
       engineLight.color.setHex(boost > 0.55 ? 0x00f0ff : 0xff9a4d);
     }
   };

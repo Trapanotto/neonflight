@@ -60,7 +60,7 @@ app.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(COLORS.fog, 0.00135);
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 6500);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 2, 6500);
 camera.position.set(0, 90, 300);
 
 const ambient = new THREE.AmbientLight(0x4a2a7a, 0.9);
@@ -823,7 +823,7 @@ function animate() {
     });
   }
 
-  city.update(frameDt);
+  city.update(frameDt, camera.position);
 
   if (!reduceFlashing) {
     lightningTimer -= frameDt;

@@ -13,6 +13,7 @@ const fragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uFlash;
   uniform vec3 uSunDir;
+  uniform vec3 uMoonDir;
   varying vec3 vDir;
 
   float hash(vec3 p) {
@@ -43,6 +44,17 @@ const fragmentShader = /* glsl */ `
     vec3 sunColor = mix(vec3(1.0, 0.12, 0.55), vec3(1.0, 0.82, 0.30), clamp((dir.y - 0.02) * 5.0, 0.0, 1.0));
     col += sunColor * (disc * stripes * 1.9 + glow * 0.55);
 
+    // Distant moon with a soft halo.
+    float md = dot(dir, normalize(uMoonDir));
+    float moonDisc = smoothstep(0.99935, 0.9997, md);
+    float moonGlow = pow(max(md, 0.0), 130.0);
+    vec3 moonColor = vec3(0.62, 0.80, 1.0);
+    col += moonColor * (moonDisc * 1.25 + moonGlow * 0.28);
+
+    // Low haze band that helps the city melt into the horizon.
+    float haze = exp(-abs(h - 0.035) * 18.0);
+    col += vec3(0.28, 0.035, 0.30) * haze * 0.10;
+
     // Stars, only above the haze.
     vec3 cell = floor(dir * 460.0);
     float star = step(0.9986, hash(cell));
@@ -67,7 +79,8 @@ export function createSky(scene) {
     uniforms: {
       uTime: { value: 0 },
       uFlash: { value: 0 },
-      uSunDir: { value: new THREE.Vector3(0.22, 0.075, -1).normalize() }
+      uSunDir: { value: new THREE.Vector3(0.22, 0.075, -1).normalize() },
+      uMoonDir: { value: new THREE.Vector3(-0.78, 0.34, 0.58).normalize() }
     },
     vertexShader,
     fragmentShader,

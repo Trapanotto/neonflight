@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the finite ground plane with an infinite world-space neon grid that
+  follows the camera and fades into the fog, so the map edge is never visible.
+- Added procedural lit-window patterns to building facades.
+- Reworked rooftop neon into edge frames instead of glowing roof slabs.
+- Moved facade trim off the building surfaces and added polygon offsets.
+- Raised the camera near plane for better depth precision in the distance.
+- Added a moon, horizon haze and a subtler ring guide.
+
 ## 0.4.0 – Share & Challenge
 
 - Shareable result links with course and target time.

@@ -17,38 +17,6 @@ const BILLBOARD_TEXTS = [
   'PULSE'
 ];
 
-function makeGridTexture() {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-
-  ctx.fillStyle = '#05010f';
-  ctx.fillRect(0, 0, size, size);
-
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.55)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(1, 1, size - 2, size - 2);
-
-  ctx.strokeStyle = 'rgba(255, 47, 208, 0.22)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(size / 2, 0);
-  ctx.lineTo(size / 2, size);
-  ctx.moveTo(0, size / 2);
-  ctx.lineTo(size, size / 2);
-  ctx.stroke();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(220, 220);
-  texture.anisotropy = 4;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
 function makeBillboardTexture(text, accent) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -94,8 +62,156 @@ function addNeonMaterial(intensity = 1.5) {
   return new THREE.MeshBasicMaterial({
     color: 0xffffff,
     toneMapped: false,
-    fog: true
+    fog: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
   });
+}
+
+function enableNeonWindows(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+      varying vec3 vNeonWorldPos;
+      varying vec3 vNeonNormal;`
+    );
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <worldpos_vertex>',
+      `vec4 worldPosition = vec4( transformed, 1.0 );
+      #ifdef USE_BATCHING
+        worldPosition = batchingMatrix * worldPosition;
+      #endif
+      #ifdef USE_INSTANCING
+        worldPosition = instanceMatrix * worldPosition;
+      #endif
+      worldPosition = modelMatrix * worldPosition;
+      vNeonWorldPos = worldPosition.xyz;
+      vNeonNormal = normal;`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+      varying vec3 vNeonWorldPos;
+      varying vec3 vNeonNormal;
+
+      float neonWindowHash(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      vec3 facadeNormal = normalize(vNeonNormal);
+
+      if (abs(facadeNormal.y) < 0.5) {
+        vec2 faceUv = abs(facadeNormal.x) > abs(facadeNormal.z)
+          ? vec2(vNeonWorldPos.z, vNeonWorldPos.y)
+          : vec2(vNeonWorldPos.x, vNeonWorldPos.y);
+
+        vec2 cellUv = faceUv / vec2(4.6, 6.0);
+        vec2 cellId = floor(cellUv);
+        vec2 cellFrac = fract(cellUv);
+
+        float windowMask =
+          step(0.22, cellFrac.x) * step(cellFrac.x, 0.78) *
+          step(0.30, cellFrac.y) * step(cellFrac.y, 0.70);
+
+        vec2 faceSeed = vec2(
+          facadeNormal.x * 17.0 + facadeNormal.z * 31.0,
+          facadeNormal.x * 7.0 - facadeNormal.z * 13.0
+        );
+
+        float floorLit = step(0.55, neonWindowHash(vec2(floor(faceUv.y / 6.0), faceSeed.x)));
+        float lit = step(0.35, neonWindowHash(cellId + faceSeed));
+        float tone = neonWindowHash(cellId + faceSeed + 19.0);
+        vec3 windowColor = mix(vec3(0.04, 0.30, 0.45), vec3(0.50, 0.06, 0.34), tone);
+        float intensity = 0.5 + neonWindowHash(cellId + faceSeed + 37.0) * 1.1;
+        float windowFade = 1.0 - smoothstep(350.0, 1500.0, distance(cameraPosition, vNeonWorldPos));
+
+        totalEmissiveRadiance += windowColor * (windowMask * lit * floorLit * intensity * 0.7 * windowFade);
+      }`
+    );
+  };
+
+  material.customProgramCacheKey = () => 'neon-building-windows-v1';
+  return material;
+}
+
+function createGround() {
+  const geometry = new THREE.PlaneGeometry(16000, 16000);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uFogColor: { value: new THREE.Color(COLORS.fog) },
+      uFogDensity: { value: 0.00135 },
+      uCameraPos: { value: new THREE.Vector3() }
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform vec3 uFogColor;
+      uniform float uFogDensity;
+      uniform vec3 uCameraPos;
+      varying vec3 vWorldPosition;
+
+      float gridLine(vec2 coord, float thickness) {
+        vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
+        float line = min(grid.x, grid.y);
+        return 1.0 - min(line * thickness, 1.0);
+      }
+
+      void main() {
+        vec2 p = vWorldPosition.xz;
+        float minor = gridLine(p / 16.0, 1.0);
+        float major = gridLine(p / 96.0, 1.25);
+
+        vec3 color = vec3(0.008, 0.004, 0.024);
+        vec3 cyan = vec3(0.0, 0.70, 0.95);
+        vec3 magenta = vec3(0.95, 0.06, 0.62);
+
+        color += cyan * minor * 0.20;
+        color += magenta * major * 0.30;
+
+        float pulse = 0.5 + 0.5 * sin(uTime * 0.9 - (p.x + p.y) * 0.0025);
+        color += cyan * minor * pulse * 0.06;
+
+        vec3 viewDir = normalize(uCameraPos - vWorldPosition);
+        float grazing = pow(1.0 - clamp(viewDir.y, 0.0, 1.0), 3.0);
+        color += vec3(0.10, 0.02, 0.14) * grazing * 0.45;
+
+        float dist = distance(p, uCameraPos.xz);
+        float horizon = smoothstep(800.0, 4000.0, dist);
+        vec3 farColor = mix(uFogColor, vec3(0.18, 0.018, 0.20), horizon * 0.7);
+
+        float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
+        color = mix(color, farColor, clamp(fogFactor, 0.0, 1.0));
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    fog: false
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = -0.6;
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -2;
+  return mesh;
 }
 
 export function createCity(scene, coursePath, seed = 4242) {
@@ -170,13 +286,13 @@ export function createCity(scene, coursePath, seed = 4242) {
   const bodyGeometry = new THREE.BoxGeometry(1, 1, 1);
   bodyGeometry.translate(0, 0.5, 0);
 
-  const bodyMaterial = new THREE.MeshStandardMaterial({
+  const bodyMaterial = enableNeonWindows(new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.58,
     metalness: 0.45,
     emissive: 0x120827,
     emissiveIntensity: 0.75
-  });
+  }));
 
   const bodies = new THREE.InstancedMesh(bodyGeometry, bodyMaterial, buildings.length);
   bodies.instanceMatrix.setUsage(THREE.StaticDrawUsage);
@@ -222,9 +338,9 @@ export function createCity(scene, coursePath, seed = 4242) {
   buildings.forEach((building, buildingIndex) => {
     corners.forEach(([sx, sz], cornerIndex) => {
       dummy.position.set(
-        building.x + sx * building.width * 0.5,
+        building.x + sx * (building.width * 0.5 + 0.28),
         0,
-        building.z + sz * building.depth * 0.5
+        building.z + sz * (building.depth * 0.5 + 0.28)
       );
       dummy.rotation.set(0, 0, 0);
       dummy.scale.set(1, building.height, 1);
@@ -244,24 +360,37 @@ export function createCity(scene, coursePath, seed = 4242) {
 
   // ---------- Rooftop bands ----------
   const bandGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const bands = new THREE.InstancedMesh(bandGeometry, neonMaterial, buildings.length);
+  const bands = new THREE.InstancedMesh(bandGeometry, neonMaterial, buildings.length * 4);
   const amber = new THREE.Color(COLORS.amber).multiplyScalar(1.4);
 
-  buildings.forEach((building, index) => {
-    dummy.position.set(building.x, building.height - 0.3, building.z);
-    dummy.rotation.set(0, 0, 0);
-    dummy.scale.set(building.width + 0.8, 0.6, building.depth + 0.8);
-    dummy.updateMatrix();
-    bands.setMatrixAt(index, dummy.matrix);
+  let bandIndex = 0;
 
+  buildings.forEach((building) => {
     const value = random();
-    if (value < 0.55) {
-      bands.setColorAt(index, cyan);
-    } else if (value < 0.85) {
-      bands.setColorAt(index, magenta);
-    } else {
-      bands.setColorAt(index, amber);
+    let bandColor = cyan;
+    if (value >= 0.55 && value < 0.85) {
+      bandColor = magenta;
+    } else if (value >= 0.85) {
+      bandColor = amber;
     }
+
+    const y = building.height + 0.12;
+    const sides = [
+      { x: building.x, z: building.z + building.depth * 0.5 + 0.24, sx: building.width + 0.9, sz: 0.36 },
+      { x: building.x, z: building.z - building.depth * 0.5 - 0.24, sx: building.width + 0.9, sz: 0.36 },
+      { x: building.x + building.width * 0.5 + 0.24, z: building.z, sx: 0.36, sz: building.depth + 0.9 },
+      { x: building.x - building.width * 0.5 - 0.24, z: building.z, sx: 0.36, sz: building.depth + 0.9 }
+    ];
+
+    sides.forEach((side) => {
+      dummy.position.set(side.x, y, side.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(side.sx, 0.35, side.sz);
+      dummy.updateMatrix();
+      bands.setMatrixAt(bandIndex, dummy.matrix);
+      bands.setColorAt(bandIndex, bandColor);
+      bandIndex++;
+    });
   });
 
   bands.instanceMatrix.needsUpdate = true;
@@ -288,7 +417,10 @@ export function createCity(scene, coursePath, seed = 4242) {
       transparent: true,
       toneMapped: false,
       side: THREE.DoubleSide,
-      fog: true
+      fog: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
     });
 
     const billboard = new THREE.Mesh(geometry, material);
@@ -300,17 +432,12 @@ export function createCity(scene, coursePath, seed = 4242) {
     group.add(billboard);
   });
 
-  // ---------- Ground grid ----------
-  const groundGeometry = new THREE.PlaneGeometry(9000, 9000);
-  const groundMaterial = new THREE.MeshBasicMaterial({
-    map: makeGridTexture(),
-    color: 0xffffff,
-    toneMapped: false,
-    fog: true
-  });
-  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.2;
+  // ---------- Infinite ground grid ----------
+  const ground = createGround();
+  if (scene.fog) {
+    ground.material.uniforms.uFogColor.value.copy(scene.fog.color);
+    ground.material.uniforms.uFogDensity.value = scene.fog.density;
+  }
   group.add(ground);
 
   // ---------- Street traffic ----------
@@ -397,8 +524,16 @@ export function createCity(scene, coursePath, seed = 4242) {
   return {
     group,
     buildings,
-    update(dt) {
+    update(dt, cameraPosition) {
       updateCars(dt);
+
+      ground.material.uniforms.uTime.value += dt;
+
+      if (cameraPosition) {
+        ground.position.x = cameraPosition.x;
+        ground.position.z = cameraPosition.z;
+        ground.material.uniforms.uCameraPos.value.copy(cameraPosition);
+      }
     },
     dispose() {
       scene.remove(group);
