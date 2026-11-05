@@ -9,6 +9,10 @@
 - Moved facade trim off the building surfaces and added polygon offsets.
 - Raised the camera near plane for better depth precision in the distance.
 - Added a moon, horizon haze and a subtler ring guide.
+- Added tiered building setbacks, district neon palettes and brighter rooftop
+  antennas with blinking beacons.
+- Added skybridges, halo landmarks, sweeping searchlights and aerial traffic
+  lanes near the race routes.
 
 ## 0.4.0 – Share & Challenge
 
